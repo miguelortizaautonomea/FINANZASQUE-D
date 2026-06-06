@@ -121,6 +121,9 @@ export default function Dashboard() {
 
   // Filtro de mes para vista Categorías
   const [categoryMonth, setCategoryMonth] = useState<string>('all'); // 'all' o '2026-06'
+
+  // Ordenamiento para Fact. Ingresos y Fact. Gastos
+  const [invoiceSortBy, setInvoiceSortBy] = useState<'number-asc' | 'number-desc' | 'date-asc' | 'date-desc'>('number-asc');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const csvInputRef = useRef<HTMLInputElement>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -1081,11 +1084,25 @@ export default function Dashboard() {
               i.hasInvoice === true &&
               i.date >= minDate
             )
-            // Ordenar por número de factura (12, 13, 14, 15...)
             .sort((a, b) => {
-              const numA = parseInt(a.number) || 0;
-              const numB = parseInt(b.number) || 0;
-              return numA - numB;
+              switch (invoiceSortBy) {
+                case 'number-asc': {
+                  const numA = parseInt(a.number) || 0;
+                  const numB = parseInt(b.number) || 0;
+                  return numA - numB;
+                }
+                case 'number-desc': {
+                  const numA = parseInt(a.number) || 0;
+                  const numB = parseInt(b.number) || 0;
+                  return numB - numA;
+                }
+                case 'date-asc':
+                  return new Date(a.date).getTime() - new Date(b.date).getTime();
+                case 'date-desc':
+                  return new Date(b.date).getTime() - new Date(a.date).getTime();
+                default:
+                  return 0;
+              }
             });
 
           // Función para abrir el modal con "Tiene factura" pre-activado
@@ -1208,8 +1225,59 @@ export default function Dashboard() {
               {/* Lista de Facturas */}
               <div className="bg-zinc-900 rounded-xl border border-zinc-800 overflow-hidden">
                 <div className="px-6 py-4 border-b border-zinc-800 bg-zinc-950 flex items-center justify-between">
-                  <h2 className="text-lg font-bold text-white">Lista de Facturas</h2>
-                  <span className="text-xs text-zinc-500">{invoicesList.length} registros</span>
+                  <div className="flex items-center gap-4">
+                    <h2 className="text-lg font-bold text-white">Lista de Facturas</h2>
+                    <span className="text-xs text-zinc-500">{invoicesList.length} registros</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] text-zinc-500 uppercase tracking-wider font-bold">Ordenar:</span>
+                    <div className="flex gap-1 bg-zinc-800 p-1 rounded-lg">
+                      <button
+                        onClick={() => setInvoiceSortBy('number-asc')}
+                        className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${
+                          invoiceSortBy === 'number-asc'
+                            ? `bg-gradient-to-r from-${colorClass}-500 to-${isIncome ? 'teal' : 'pink'}-600 text-white shadow-md`
+                            : 'text-zinc-400 hover:text-white'
+                        }`}
+                        title="Número ascendente (12, 13, 14...)"
+                      >
+                        Nº ↑
+                      </button>
+                      <button
+                        onClick={() => setInvoiceSortBy('number-desc')}
+                        className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${
+                          invoiceSortBy === 'number-desc'
+                            ? `bg-gradient-to-r from-${colorClass}-500 to-${isIncome ? 'teal' : 'pink'}-600 text-white shadow-md`
+                            : 'text-zinc-400 hover:text-white'
+                        }`}
+                        title="Número descendente (24, 23, 22...)"
+                      >
+                        Nº ↓
+                      </button>
+                      <button
+                        onClick={() => setInvoiceSortBy('date-asc')}
+                        className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${
+                          invoiceSortBy === 'date-asc'
+                            ? `bg-gradient-to-r from-${colorClass}-500 to-${isIncome ? 'teal' : 'pink'}-600 text-white shadow-md`
+                            : 'text-zinc-400 hover:text-white'
+                        }`}
+                        title="Fecha ascendente (más antigua primero)"
+                      >
+                        Fecha ↑
+                      </button>
+                      <button
+                        onClick={() => setInvoiceSortBy('date-desc')}
+                        className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${
+                          invoiceSortBy === 'date-desc'
+                            ? `bg-gradient-to-r from-${colorClass}-500 to-${isIncome ? 'teal' : 'pink'}-600 text-white shadow-md`
+                            : 'text-zinc-400 hover:text-white'
+                        }`}
+                        title="Fecha descendente (más reciente primero)"
+                      >
+                        Fecha ↓
+                      </button>
+                    </div>
+                  </div>
                 </div>
                 {invoicesList.length > 0 ? (
                   <div className="overflow-x-auto">
@@ -1217,9 +1285,8 @@ export default function Dashboard() {
                       <thead className="bg-zinc-950 border-b border-zinc-800">
                         <tr>
                           <th className="text-center py-3 px-3 text-xs font-bold text-zinc-400 tracking-wider uppercase">Nº</th>
-                          <th className="text-left py-3 px-4 text-xs font-bold text-zinc-400 tracking-wider uppercase">Empresa / Descripción</th>
-                          <th className="text-left py-3 px-3 text-xs font-bold text-zinc-400 tracking-wider uppercase">Categoría</th>
-                          <th className="text-left py-3 px-3 text-xs font-bold text-zinc-400 tracking-wider uppercase">Método</th>
+                          <th className="text-left py-3 px-4 text-xs font-bold text-zinc-400 tracking-wider uppercase">Empresa</th>
+                          <th className="text-left py-3 px-4 text-xs font-bold text-zinc-400 tracking-wider uppercase">Descripción</th>
                           <th className="text-right py-3 px-3 text-xs font-bold text-zinc-400 tracking-wider uppercase">Base</th>
                           <th className="text-right py-3 px-3 text-xs font-bold text-zinc-400 tracking-wider uppercase">IVA</th>
                           <th className="text-right py-3 px-3 text-xs font-bold text-zinc-400 tracking-wider uppercase">Total</th>
@@ -1241,19 +1308,9 @@ export default function Dashboard() {
                               </td>
                               <td className="py-3 px-4">
                                 <div className="font-semibold text-white text-sm">{inv.company || '-'}</div>
-                                {inv.description && (
-                                  <div className="text-xs text-zinc-400 mt-0.5">{inv.description}</div>
-                                )}
                               </td>
-                              <td className="py-3 px-3">
-                                <span className="bg-blue-500/10 text-blue-400 border border-blue-500/20 px-2 py-0.5 rounded-full text-xs whitespace-nowrap">
-                                  {inv.category}
-                                </span>
-                              </td>
-                              <td className="py-3 px-3">
-                                <span className="bg-violet-500/10 text-violet-400 border border-violet-500/20 px-2 py-0.5 rounded-full text-xs whitespace-nowrap">
-                                  {inv.method}
-                                </span>
+                              <td className="py-3 px-4">
+                                <div className="text-sm text-zinc-300">{inv.description || <span className="text-zinc-600 italic">Sin descripción</span>}</div>
                               </td>
                               <td className="py-3 px-3 text-right text-zinc-300 text-sm whitespace-nowrap">{base.toFixed(2)}€</td>
                               <td className="py-3 px-3 text-right text-amber-400 text-sm whitespace-nowrap">{iva.toFixed(2)}€</td>
