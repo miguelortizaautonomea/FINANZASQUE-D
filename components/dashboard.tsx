@@ -137,13 +137,13 @@ export default function Dashboard() {
   });
 
   // Función para analizar un PDF y autorrellenar el formulario
+  // Extrae: Número de factura, Importe (bruto), IVA (21% o 0%)
   const analyzePDF = async (file: File, type: 'income' | 'expense') => {
     setAnalyzingPDF(true);
     setPdfAnalysisError('');
     try {
       const fd = new FormData();
       fd.append('file', file);
-      fd.append('type', type);
 
       const response = await fetch('/api/analyze-pdf', {
         method: 'POST',
@@ -158,20 +158,18 @@ export default function Dashboard() {
 
       const data = result.data;
 
-      // Auto-rellenar el formulario
+      // Auto-rellenar solo lo que extrajimos: nº factura, monto, IVA
       setFormData((prev) => ({
         ...prev,
-        company: data.company || prev.company,
-        number: data.company || prev.number,
+        number: data.invoiceNumber || prev.number,
+        // Si tiene número, usarlo también como descripción si no hay nada
+        company: prev.company || (data.invoiceNumber ? `Factura Nº ${data.invoiceNumber}` : prev.company),
         amount: data.amount?.toString() || prev.amount,
         amountWithoutVAT: data.amountWithoutVAT?.toString() || prev.amountWithoutVAT,
-        ivaPercent: data.ivaPercent?.toString() || '21',
-        date: data.date || prev.date,
-        category: type === 'expense' ? (data.category || prev.category) : prev.category,
-        method: data.method || prev.method,
+        ivaPercent: data.ivaPercent !== undefined ? data.ivaPercent.toString() : '21',
       }));
 
-      // Activar el toggle "Tiene factura"
+      // Activar el toggle "Tiene factura" automáticamente
       setSelectedFile(file);
     } catch (error: any) {
       setPdfAnalysisError(error.message || 'No se pudo analizar el PDF');
@@ -2173,10 +2171,8 @@ export default function Dashboard() {
                     onChange={(e) => setFormData({ ...formData, ivaPercent: e.target.value })}
                     className="w-full px-3 py-2 border border-zinc-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500 text-white bg-zinc-950 text-sm"
                   >
-                    <option value="21">21% (General)</option>
-                    <option value="10">10% (Reducido)</option>
-                    <option value="4">4% (Superreducido)</option>
-                    <option value="0">0% (Exento)</option>
+                    <option value="21">21% (España)</option>
+                    <option value="0">0% (Andorra, Dubai, exento)</option>
                   </select>
                   {formData.amount && (
                     <div className="grid grid-cols-3 gap-2 text-center pt-2 border-t border-zinc-800">
@@ -2375,10 +2371,8 @@ export default function Dashboard() {
                     onChange={(e) => setFormData({ ...formData, ivaPercent: e.target.value })}
                     className="w-full px-3 py-2 border border-zinc-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500 text-white bg-zinc-950 text-sm"
                   >
-                    <option value="21">21% (General)</option>
-                    <option value="10">10% (Reducido)</option>
-                    <option value="4">4% (Superreducido)</option>
-                    <option value="0">0% (Exento)</option>
+                    <option value="21">21% (España)</option>
+                    <option value="0">0% (Andorra, Dubai, exento)</option>
                   </select>
                   {formData.amount && (
                     <div className="grid grid-cols-3 gap-2 text-center pt-2 border-t border-zinc-800">
@@ -2545,10 +2539,8 @@ export default function Dashboard() {
                     onChange={(e) => setFormData({ ...formData, ivaPercent: e.target.value })}
                     className="w-full px-3 py-2 border border-zinc-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500 text-white bg-zinc-950 text-sm"
                   >
-                    <option value="21">21% (General)</option>
-                    <option value="10">10% (Reducido)</option>
-                    <option value="4">4% (Superreducido)</option>
-                    <option value="0">0% (Exento)</option>
+                    <option value="21">21% (España)</option>
+                    <option value="0">0% (Andorra, Dubai, exento)</option>
                   </select>
                   {formData.amount && (
                     <div className="grid grid-cols-3 gap-2 text-center pt-2 border-t border-zinc-800">
