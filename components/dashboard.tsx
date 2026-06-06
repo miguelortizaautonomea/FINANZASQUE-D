@@ -65,7 +65,7 @@ interface Invoice {
 const CATEGORIES = ['comidas', 'caballo', 'deporte', 'work', 'ocio', 'caprichos', 'viajes', 'campo', 'regalos', 'coche', 'desayuno'];
 const METHODS = ['Tarjeta', 'Efectivo', 'Transferencia', 'Bizum', 'PayPal', 'Otro'];
 
-type ViewType = 'dashboard' | 'transactions' | 'accounting' | 'categories' | 'settings';
+type ViewType = 'dashboard' | 'transactions' | 'accounting' | 'invoices-income' | 'invoices-expense' | 'categories' | 'settings';
 
 export default function Dashboard() {
   const [activeView, setActiveView] = useState<ViewType>('dashboard');
@@ -77,18 +77,27 @@ export default function Dashboard() {
   const [showEditDialog, setShowEditDialog] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
 
+  // Helper: SIEMPRE devuelve el mes actual real (calculado en el momento)
+  const getCurrentMonthRange = () => {
+    const now = new Date();
+    const firstDay = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
+    const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split('T')[0];
+    const todayStr = now.toISOString().split('T')[0];
+    return { firstDay, lastDay, todayStr };
+  };
+
   // Filtros para gráficos y métricas (arriba) - Por defecto MES ACTUAL hasta HOY
-  const _today = new Date();
-  const _firstDay = new Date(_today.getFullYear(), _today.getMonth(), 1).toISOString().split('T')[0];
-  const _todayStr = _today.toISOString().split('T')[0];
+  const _initialRange = getCurrentMonthRange();
+  const _firstDay = _initialRange.firstDay;
+  const _todayStr = _initialRange.todayStr;
   const [chartDateFrom, setChartDateFrom] = useState<string>(_firstDay);
   const [chartDateTo, setChartDateTo] = useState<string>(_todayStr);
   const [chartFilterType, setChartFilterType] = useState<'all' | 'income' | 'expense'>('all');
 
   // Filtros para tabla (abajo) - Por defecto MES ACTUAL
-  const today = new Date();
-  const firstDayOfMonth = new Date(today.getFullYear(), today.getMonth(), 1).toISOString().split('T')[0];
-  const lastDayOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0).toISOString().split('T')[0];
+  const _tableRange = getCurrentMonthRange();
+  const firstDayOfMonth = _tableRange.firstDay;
+  const lastDayOfMonth = _tableRange.lastDay;
   const [dateFrom, setDateFrom] = useState<string>(firstDayOfMonth);
   const [dateTo, setDateTo] = useState<string>(lastDayOfMonth);
   const [filterType, setFilterType] = useState<'all' | 'income' | 'expense'>('all');
@@ -501,8 +510,9 @@ export default function Dashboard() {
   };
 
   const clearFilters = () => {
-    setDateFrom(firstDayOfMonth);
-    setDateTo(lastDayOfMonth);
+    const range = getCurrentMonthRange();
+    setDateFrom(range.firstDay);
+    setDateTo(range.lastDay);
     setFilterType('all');
     setFilterCategory('all');
     setSearchText('');
@@ -584,10 +594,15 @@ export default function Dashboard() {
 
   // Sidebar Component - Profesional Dark Mode
   const Sidebar = () => {
+    const invoicesIncomeCount = invoices.filter(i => i.type === 'income' && i.hasInvoice).length;
+    const invoicesExpenseCount = invoices.filter(i => i.type === 'expense' && i.hasInvoice).length;
+
     const navItems = [
       { id: 'dashboard' as ViewType, label: 'Dashboard', icon: LayoutDashboard, badge: null },
       { id: 'transactions' as ViewType, label: 'Transacciones', icon: Receipt, badge: invoices.length },
       { id: 'accounting' as ViewType, label: 'Contabilidad', icon: Calculator, badge: 'Q' + accountingData.currentQuarter },
+      { id: 'invoices-income' as ViewType, label: 'Fact. Ingresos', icon: TrendingUp, badge: invoicesIncomeCount },
+      { id: 'invoices-expense' as ViewType, label: 'Fact. Gastos', icon: TrendingDown, badge: invoicesExpenseCount },
       { id: 'categories' as ViewType, label: 'Categorías', icon: Tag, badge: null },
       { id: 'settings' as ViewType, label: 'Configuración', icon: Settings, badge: null },
     ];
@@ -693,16 +708,19 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* Resumen Anual */}
+      {/* Resumen Trimestre Actual */}
       <div>
-        <h2 className="text-xl font-bold text-white mb-4">📊 Resumen Anual</h2>
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-xl font-bold text-white">📊 Resumen Trimestre Actual (Q{accountingData.currentQuarter})</h2>
+          <span className="text-xs text-zinc-500">{['Ene · Feb · Mar', 'Abr · May · Jun', 'Jul · Ago · Sep', 'Oct · Nov · Dic'][accountingData.currentQuarter - 1]}</span>
+        </div>
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           <div className="bg-zinc-900 rounded-xl border border-zinc-800 border-l-4 border-green-500 p-6 shadow-sm">
             <div className="flex items-center justify-between mb-2">
               <p className="text-sm text-zinc-400 font-semibold">INGRESOS</p>
               <TrendingUp className="text-green-500" size={20} />
             </div>
-            <p className="text-3xl font-bold text-emerald-400">{accountingData.year.income.toFixed(2)}€</p>
+            <p className="text-3xl font-bold text-emerald-400">{accountingData.quarters[accountingData.currentQuarter - 1].income.toFixed(2)}€</p>
           </div>
 
           <div className="bg-zinc-900 rounded-xl border border-zinc-800 border-l-4 border-red-500 p-6 shadow-sm">
@@ -710,16 +728,16 @@ export default function Dashboard() {
               <p className="text-sm text-zinc-400 font-semibold">GASTOS</p>
               <TrendingDown className="text-red-500" size={20} />
             </div>
-            <p className="text-3xl font-bold text-rose-400">{accountingData.year.expenses.toFixed(2)}€</p>
+            <p className="text-3xl font-bold text-rose-400">{accountingData.quarters[accountingData.currentQuarter - 1].expenses.toFixed(2)}€</p>
           </div>
 
-          <div className={`bg-zinc-900 rounded-xl border border-zinc-800 border-l-4 ${accountingData.year.benefit >= 0 ? 'border-blue-500' : 'border-orange-500'} p-6 shadow-sm`}>
+          <div className={`bg-zinc-900 rounded-xl border border-zinc-800 border-l-4 ${accountingData.quarters[accountingData.currentQuarter - 1].benefit >= 0 ? 'border-blue-500' : 'border-orange-500'} p-6 shadow-sm`}>
             <div className="flex items-center justify-between mb-2">
               <p className="text-sm text-zinc-400 font-semibold">BENEFICIO BRUTO</p>
-              <PiggyBank className={accountingData.year.benefit >= 0 ? 'text-blue-500' : 'text-orange-500'} size={20} />
+              <PiggyBank className={accountingData.quarters[accountingData.currentQuarter - 1].benefit >= 0 ? 'text-blue-500' : 'text-orange-500'} size={20} />
             </div>
-            <p className={`text-3xl font-bold ${accountingData.year.benefit >= 0 ? 'text-blue-400' : 'text-orange-400'}`}>
-              {accountingData.year.benefit.toFixed(2)}€
+            <p className={`text-3xl font-bold ${accountingData.quarters[accountingData.currentQuarter - 1].benefit >= 0 ? 'text-blue-400' : 'text-orange-400'}`}>
+              {accountingData.quarters[accountingData.currentQuarter - 1].benefit.toFixed(2)}€
             </p>
           </div>
 
@@ -728,15 +746,18 @@ export default function Dashboard() {
               <p className="text-sm text-zinc-400 font-semibold">BENEFICIO NETO</p>
               <Wallet className="text-purple-500" size={20} />
             </div>
-            <p className="text-3xl font-bold text-violet-400">{accountingData.year.beneficioNeto.toFixed(2)}€</p>
+            <p className="text-3xl font-bold text-violet-400">{accountingData.quarters[accountingData.currentQuarter - 1].beneficioNeto.toFixed(2)}€</p>
             <p className="text-xs text-zinc-500 mt-1">Tras impuestos</p>
           </div>
         </div>
       </div>
 
-      {/* Impuestos Anuales */}
+      {/* Impuestos Trimestre */}
       <div>
-        <h2 className="text-xl font-bold text-white mb-4">💰 Impuestos Estimados (Anual)</h2>
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-xl font-bold text-white">💰 Impuestos Estimados (Trimestre Q{accountingData.currentQuarter})</h2>
+          <span className="text-xs text-zinc-500">A pagar al finalizar el trimestre</span>
+        </div>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div className="bg-zinc-900 border border-orange-500/20 rounded-lg p-6">
             <div className="flex items-center gap-3 mb-3">
@@ -748,7 +769,7 @@ export default function Dashboard() {
                 <p className="text-xs text-zinc-500">Modelo 303 (21%)</p>
               </div>
             </div>
-            <p className="text-2xl font-bold text-orange-400">{accountingData.year.ivaAPagar.toFixed(2)}€</p>
+            <p className="text-2xl font-bold text-orange-400">{accountingData.quarters[accountingData.currentQuarter - 1].ivaAPagar.toFixed(2)}€</p>
           </div>
 
           <div className="bg-zinc-900 border border-rose-500/20 rounded-lg p-6">
@@ -761,7 +782,7 @@ export default function Dashboard() {
                 <p className="text-xs text-zinc-500">Modelo 130 (20%)</p>
               </div>
             </div>
-            <p className="text-2xl font-bold text-rose-400">{accountingData.year.irpf.toFixed(2)}€</p>
+            <p className="text-2xl font-bold text-rose-400">{accountingData.quarters[accountingData.currentQuarter - 1].irpfRetencion.toFixed(2)}€</p>
           </div>
 
           <div className="bg-gradient-to-br from-amber-500/10 to-zinc-900 border border-amber-500/30 rounded-xl p-6 hover:border-amber-500/50 transition-all">
@@ -774,7 +795,7 @@ export default function Dashboard() {
                 <p className="text-[10px] text-zinc-500 tracking-wider uppercase">IVA + IRPF</p>
               </div>
             </div>
-            <p className="text-3xl font-bold text-amber-400">{accountingData.year.totalImpuestos.toFixed(2)}€</p>
+            <p className="text-3xl font-bold text-amber-400">{accountingData.quarters[accountingData.currentQuarter - 1].totalImpuestos.toFixed(2)}€</p>
           </div>
         </div>
       </div>
@@ -923,6 +944,151 @@ export default function Dashboard() {
 
         {/* CONTENIDO PRINCIPAL */}
         {activeView === 'accounting' && <AccountingView />}
+
+        {/* VISTA DE FACT. INGRESOS / FACT. GASTOS */}
+        {(activeView === 'invoices-income' || activeView === 'invoices-expense') && (() => {
+          const isIncome = activeView === 'invoices-income';
+          const invoiceType = isIncome ? 'income' : 'expense';
+          const colorClass = isIncome ? 'emerald' : 'rose';
+          const Icon = isIncome ? TrendingUp : TrendingDown;
+
+          // Solo facturas (hasInvoice === true) del tipo correspondiente
+          const invoicesList = invoices
+            .filter(i => i.type === invoiceType && i.hasInvoice === true)
+            .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+          const total = invoicesList.reduce((sum, i) => sum + i.amount, 0);
+          const ivaTotal = total * 0.21;
+
+          // Agrupar por trimestre
+          const quarters = [1, 2, 3, 4].map(q => {
+            const qInvoices = invoicesList.filter(inv => {
+              const month = new Date(inv.date).getMonth();
+              return month >= (q - 1) * 3 && month < q * 3 &&
+                     new Date(inv.date).getFullYear() === new Date().getFullYear();
+            });
+            return {
+              quarter: q,
+              count: qInvoices.length,
+              total: qInvoices.reduce((s, i) => s + i.amount, 0),
+            };
+          });
+
+          return (
+            <div className="space-y-6">
+              {/* Hero Header */}
+              <div className={`relative bg-gradient-to-br from-zinc-900 via-zinc-900 to-${colorClass}-950/30 rounded-2xl p-8 border border-zinc-800 overflow-hidden`}>
+                <div className={`absolute top-0 right-0 w-96 h-96 bg-${colorClass}-500/5 rounded-full -mr-48 -mt-48 blur-3xl`}></div>
+                <div className="relative flex items-center justify-between">
+                  <div className="flex items-center gap-5">
+                    <div className={`bg-gradient-to-br from-${colorClass}-500 to-${colorClass}-600 p-4 rounded-2xl shadow-lg shadow-${colorClass}-500/20`}>
+                      <Icon size={32} className="text-white" />
+                    </div>
+                    <div>
+                      <h1 className="text-3xl font-bold text-white tracking-tight">
+                        {isIncome ? 'Facturas de Ingresos' : 'Facturas de Gastos'}
+                      </h1>
+                      <p className="text-zinc-400 text-sm mt-1">
+                        Solo facturas profesionales · <span className={`text-${colorClass}-400 font-semibold`}>{invoicesList.length} facturas</span>
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* KPI Cards */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className={`bg-gradient-to-br from-${colorClass}-500/10 to-zinc-900 rounded-xl border border-${colorClass}-500/20 p-6`}>
+                  <p className={`text-xs font-bold text-${colorClass}-400 tracking-widest uppercase mb-2`}>Total Facturado</p>
+                  <p className="text-3xl font-bold text-white">{total.toFixed(2)}€</p>
+                  <p className="text-xs text-zinc-500 mt-1">{invoicesList.length} facturas</p>
+                </div>
+                <div className="bg-gradient-to-br from-amber-500/10 to-zinc-900 rounded-xl border border-amber-500/20 p-6">
+                  <p className="text-xs font-bold text-amber-400 tracking-widest uppercase mb-2">IVA {isIncome ? 'Repercutido' : 'Soportado'} (21%)</p>
+                  <p className="text-3xl font-bold text-amber-400">{ivaTotal.toFixed(2)}€</p>
+                  <p className="text-xs text-zinc-500 mt-1">{isIncome ? 'Que has cobrado' : 'Que puedes deducir'}</p>
+                </div>
+                <div className="bg-gradient-to-br from-blue-500/10 to-zinc-900 rounded-xl border border-blue-500/20 p-6">
+                  <p className="text-xs font-bold text-blue-400 tracking-widest uppercase mb-2">Base Imponible</p>
+                  <p className="text-3xl font-bold text-white">{(total - ivaTotal).toFixed(2)}€</p>
+                  <p className="text-xs text-zinc-500 mt-1">Sin IVA</p>
+                </div>
+              </div>
+
+              {/* Desglose por Trimestre */}
+              <div>
+                <h2 className="text-lg font-bold text-white tracking-tight mb-4">Desglose por Trimestre {new Date().getFullYear()}</h2>
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                  {quarters.map((q) => (
+                    <div key={q.quarter} className="bg-zinc-900 border border-zinc-800 rounded-xl p-5">
+                      <p className="text-xs font-bold text-zinc-400 tracking-widest uppercase">Q{q.quarter}</p>
+                      <p className={`text-2xl font-bold text-${colorClass}-400 mt-2`}>{q.total.toFixed(2)}€</p>
+                      <p className="text-xs text-zinc-500 mt-1">{q.count} facturas</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Lista de Facturas */}
+              <div className="bg-zinc-900 rounded-xl border border-zinc-800 overflow-hidden">
+                <div className="px-6 py-4 border-b border-zinc-800 bg-zinc-950 flex items-center justify-between">
+                  <h2 className="text-lg font-bold text-white">Lista de Facturas</h2>
+                  <span className="text-xs text-zinc-500">{invoicesList.length} registros</span>
+                </div>
+                {invoicesList.length > 0 ? (
+                  <div className="overflow-x-auto">
+                    <table className="w-full">
+                      <thead className="bg-zinc-950 border-b border-zinc-800">
+                        <tr>
+                          <th className="text-left py-3 px-6 text-xs font-bold text-zinc-400 tracking-wider uppercase">Descripción</th>
+                          <th className="text-left py-3 px-6 text-xs font-bold text-zinc-400 tracking-wider uppercase">Categoría</th>
+                          <th className="text-left py-3 px-6 text-xs font-bold text-zinc-400 tracking-wider uppercase">Método</th>
+                          <th className="text-right py-3 px-6 text-xs font-bold text-zinc-400 tracking-wider uppercase">Base</th>
+                          <th className="text-right py-3 px-6 text-xs font-bold text-zinc-400 tracking-wider uppercase">IVA</th>
+                          <th className="text-right py-3 px-6 text-xs font-bold text-zinc-400 tracking-wider uppercase">Total</th>
+                          <th className="text-left py-3 px-6 text-xs font-bold text-zinc-400 tracking-wider uppercase">Fecha</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {invoicesList.map((inv, idx) => {
+                          const base = inv.amount / 1.21;
+                          const iva = inv.amount - base;
+                          return (
+                            <tr key={inv.id} className={`border-b border-zinc-800/50 hover:bg-zinc-800/30 transition-colors ${idx % 2 === 0 ? 'bg-zinc-900/50' : 'bg-zinc-900/20'}`}>
+                              <td className="py-3 px-6">
+                                <div className="font-semibold text-white text-sm">{inv.company}</div>
+                              </td>
+                              <td className="py-3 px-6">
+                                <span className="bg-blue-500/10 text-blue-400 border border-blue-500/20 px-2 py-0.5 rounded-full text-xs">
+                                  {inv.category}
+                                </span>
+                              </td>
+                              <td className="py-3 px-6">
+                                <span className="bg-violet-500/10 text-violet-400 border border-violet-500/20 px-2 py-0.5 rounded-full text-xs">
+                                  {inv.method}
+                                </span>
+                              </td>
+                              <td className="py-3 px-6 text-right text-zinc-300 text-sm">{base.toFixed(2)}€</td>
+                              <td className="py-3 px-6 text-right text-amber-400 text-sm">{iva.toFixed(2)}€</td>
+                              <td className={`py-3 px-6 text-right font-bold text-${colorClass}-400`}>{inv.amount.toFixed(2)}€</td>
+                              <td className="py-3 px-6 text-zinc-400 text-sm">{inv.date}</td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <div className="flex flex-col items-center justify-center py-16 px-6">
+                    <FileText size={48} className="text-zinc-700 mb-4" />
+                    <p className="text-zinc-400 text-lg font-semibold mb-2">No hay facturas todavía</p>
+                    <p className="text-zinc-500 text-sm">Marca el toggle "📄 Factura" en Transacciones para que aparezcan aquí</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          );
+        })()}
 
         {activeView === 'categories' && (() => {
           // Obtener meses disponibles
@@ -1149,8 +1315,9 @@ export default function Dashboard() {
               {(chartDateFrom !== _firstDay || chartDateTo !== _todayStr || chartFilterType !== 'all') && (
                 <button
                   onClick={() => {
-                    setChartDateFrom(_firstDay);
-                    setChartDateTo(_todayStr);
+                    const range = getCurrentMonthRange();
+                    setChartDateFrom(range.firstDay);
+                    setChartDateTo(range.todayStr);
                     setChartFilterType('all');
                   }}
                   className="text-xs bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 border border-blue-500/30 font-semibold flex items-center gap-1 px-3 py-1.5 rounded-lg transition-all"
