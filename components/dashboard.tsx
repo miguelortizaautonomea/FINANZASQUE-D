@@ -77,9 +77,12 @@ export default function Dashboard() {
   const [chartDateTo, setChartDateTo] = useState<string>('');
   const [chartFilterType, setChartFilterType] = useState<'all' | 'income' | 'expense'>('all');
 
-  // Filtros para tabla (abajo)
-  const [dateFrom, setDateFrom] = useState<string>('');
-  const [dateTo, setDateTo] = useState<string>('');
+  // Filtros para tabla (abajo) - Por defecto MES ACTUAL
+  const today = new Date();
+  const firstDayOfMonth = new Date(today.getFullYear(), today.getMonth(), 1).toISOString().split('T')[0];
+  const lastDayOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0).toISOString().split('T')[0];
+  const [dateFrom, setDateFrom] = useState<string>(firstDayOfMonth);
+  const [dateTo, setDateTo] = useState<string>(lastDayOfMonth);
   const [filterType, setFilterType] = useState<'all' | 'income' | 'expense'>('all');
   const [filterCategory, setFilterCategory] = useState<string>('all');
   const [searchText, setSearchText] = useState<string>('');
@@ -406,8 +409,8 @@ export default function Dashboard() {
   };
 
   const clearFilters = () => {
-    setDateFrom('');
-    setDateTo('');
+    setDateFrom(firstDayOfMonth);
+    setDateTo(lastDayOfMonth);
     setFilterType('all');
     setFilterCategory('all');
     setSearchText('');
@@ -852,7 +855,7 @@ export default function Dashboard() {
           </div>
         )}
 
-        {(activeView === 'dashboard' || activeView === 'transactions') && (
+        {activeView === 'dashboard' && (
         <>
 
 
@@ -1097,6 +1100,51 @@ export default function Dashboard() {
             )}
           </div>
         )}
+        </>
+        )}
+
+        {/* TRANSACCIONES VIEW */}
+        {activeView === 'transactions' && (
+        <>
+        {/* Hero Header de Transacciones */}
+        <div className="relative bg-gradient-to-br from-zinc-900 via-zinc-900 to-blue-950/30 rounded-2xl p-8 border border-zinc-800 overflow-hidden mb-8">
+          <div className="absolute top-0 right-0 w-96 h-96 bg-blue-500/5 rounded-full -mr-48 -mt-48 blur-3xl"></div>
+          <div className="absolute bottom-0 left-0 w-64 h-64 bg-indigo-500/5 rounded-full -ml-32 -mb-32 blur-3xl"></div>
+          <div className="relative flex items-center justify-between">
+            <div className="flex items-center gap-5">
+              <div className="bg-gradient-to-br from-blue-500 to-indigo-600 p-4 rounded-2xl shadow-lg shadow-blue-500/20">
+                <Receipt size={32} className="text-white" />
+              </div>
+              <div>
+                <h1 className="text-3xl font-bold text-white tracking-tight">Transacciones</h1>
+                <p className="text-zinc-400 text-sm mt-1">Mostrando: <span className="text-blue-400 font-semibold">{new Date().toLocaleDateString('es-ES', { month: 'long', year: 'numeric' })}</span> · {filteredInvoices.length} registros</p>
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setShowImportDialog(true)}
+                className="bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border border-zinc-800 font-medium py-2 px-4 rounded-lg flex items-center gap-2 transition-all text-sm"
+              >
+                <FileUp size={16} />
+                Importar CSV
+              </button>
+              <button
+                onClick={() => setShowIncomeDialog(true)}
+                className="bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white font-medium py-2 px-4 rounded-lg flex items-center gap-2 transition-all text-sm shadow-lg shadow-emerald-500/20"
+              >
+                <TrendingUp size={16} />
+                Ingreso
+              </button>
+              <button
+                onClick={() => setShowExpenseDialog(true)}
+                className="bg-gradient-to-r from-rose-500 to-pink-600 hover:from-rose-600 hover:to-pink-700 text-white font-medium py-2 px-4 rounded-lg flex items-center gap-2 transition-all text-sm shadow-lg shadow-rose-500/20"
+              >
+                <TrendingDown size={16} />
+                Gasto
+              </button>
+            </div>
+          </div>
+        </div>
 
         {/* Filters Section */}
         <div className="bg-zinc-900 rounded-xl border border-zinc-800 p-6 mb-8">
