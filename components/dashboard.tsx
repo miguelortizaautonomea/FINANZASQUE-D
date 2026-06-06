@@ -51,8 +51,9 @@ interface Invoice {
   id: string;
   type: 'income' | 'expense';
   category: string;
-  number: string;
-  company: string;
+  number: string;       // Número de factura (ej: "12")
+  company: string;      // Empresa (razón social)
+  description?: string; // Descripción del concepto facturado
   amount: number;
   amountWithoutVAT: number;
   vat: number;
@@ -126,14 +127,15 @@ export default function Dashboard() {
   const [analyzingPDF, setAnalyzingPDF] = useState(false);
   const [pdfAnalysisError, setPdfAnalysisError] = useState<string>('');
   const [formData, setFormData] = useState({
-    number: '',
-    company: '',
+    number: '',       // Número de factura
+    company: '',      // Empresa
+    description: '',  // Descripción del concepto
     amount: '',
     amountWithoutVAT: '',
     category: CATEGORIES[0],
     date: new Date().toISOString().split('T')[0],
     method: METHODS[0],
-    ivaPercent: '21', // % de IVA (21, 10, 4, 0)
+    ivaPercent: '21',
   });
 
   // Función para analizar un PDF y autorrellenar el formulario
@@ -158,12 +160,12 @@ export default function Dashboard() {
 
       const data = result.data;
 
-      // Auto-rellenar solo lo que extrajimos: nº factura, monto, IVA
+      // Auto-rellenar: nº factura, empresa, descripción, monto, IVA
       setFormData((prev) => ({
         ...prev,
         number: data.invoiceNumber || prev.number,
-        // Si tiene número, usarlo también como descripción si no hay nada
-        company: prev.company || (data.invoiceNumber ? `Factura Nº ${data.invoiceNumber}` : prev.company),
+        company: data.company || prev.company,
+        description: data.description || prev.description,
         amount: data.amount?.toString() || prev.amount,
         amountWithoutVAT: data.amountWithoutVAT?.toString() || prev.amountWithoutVAT,
         ivaPercent: data.ivaPercent !== undefined ? data.ivaPercent.toString() : '21',
@@ -387,13 +389,14 @@ export default function Dashboard() {
       category: type === 'expense' ? formData.category : 'Ingreso',
       number: formData.number || `MAN-${Date.now()}`,
       company: formData.company,
+      description: formData.description || undefined,
       amount,
       amountWithoutVAT,
       vat,
       date: formData.date,
       fileName: selectedFile?.name || 'manual',
       method: formData.method,
-      hasInvoice, // Si hay archivo, marca que tiene factura
+      hasInvoice,
     };
 
     // Optimistic update
@@ -415,6 +418,7 @@ export default function Dashboard() {
       company: '',
       amount: '',
       amountWithoutVAT: '',
+      description: '',
       category: CATEGORIES[0],
       date: new Date().toISOString().split('T')[0],
       method: METHODS[0],
@@ -505,6 +509,7 @@ export default function Dashboard() {
     setFormData({
       number: invoice.number,
       company: invoice.company,
+      description: invoice.description || '',
       amount: invoice.amount.toString(),
       amountWithoutVAT: invoice.amountWithoutVAT.toString(),
       category: invoice.category,
@@ -542,6 +547,7 @@ export default function Dashboard() {
       ...updatedInvoice,
       number: formData.number,
       company: formData.company,
+      description: formData.description || undefined,
       amount,
       amountWithoutVAT,
       vat,
@@ -576,6 +582,7 @@ export default function Dashboard() {
       company: '',
       amount: '',
       amountWithoutVAT: '',
+      description: '',
       category: CATEGORIES[0],
       date: new Date().toISOString().split('T')[0],
       method: METHODS[0],
@@ -2093,13 +2100,35 @@ export default function Dashboard() {
                 )}
               </div>
 
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-zinc-400 mb-2 tracking-wider uppercase">Nº Factura</label>
+                  <input
+                    type="text"
+                    value={formData.number}
+                    onChange={(e) => setFormData({ ...formData, number: e.target.value })}
+                    placeholder="Ej: 012"
+                    className="w-full px-3 py-2.5 border border-zinc-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 text-white bg-zinc-950 placeholder:text-zinc-600 text-sm"
+                  />
+                </div>
+                <div className="col-span-2">
+                  <label className="block text-xs font-bold text-zinc-400 mb-2 tracking-wider uppercase">Empresa *</label>
+                  <input
+                    type="text"
+                    value={formData.company}
+                    onChange={(e) => setFormData({ ...formData, company: e.target.value })}
+                    placeholder="Ej: GHL Technologies S.L."
+                    className="w-full px-3 py-2.5 border border-zinc-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 text-white bg-zinc-950 placeholder:text-zinc-600 text-sm"
+                  />
+                </div>
+              </div>
               <div>
-                <label className="block text-xs font-bold text-zinc-400 mb-2 tracking-wider uppercase">Descripción *</label>
+                <label className="block text-xs font-bold text-zinc-400 mb-2 tracking-wider uppercase">Descripción / Concepto</label>
                 <input
                   type="text"
-                  value={formData.company}
-                  onChange={(e) => setFormData({ ...formData, company: e.target.value, number: e.target.value })}
-                  placeholder="Ej: Factura cliente, Sueldo, Venta..."
+                  value={formData.description}
+                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                  placeholder="Ej: Servicios de consultoría, Suscripción mensual..."
                   className="w-full px-4 py-2.5 border border-zinc-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 text-white bg-zinc-950 placeholder:text-zinc-600"
                 />
               </div>
@@ -2279,13 +2308,35 @@ export default function Dashboard() {
                 )}
               </div>
 
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-zinc-400 mb-2 tracking-wider uppercase">Nº Factura</label>
+                  <input
+                    type="text"
+                    value={formData.number}
+                    onChange={(e) => setFormData({ ...formData, number: e.target.value })}
+                    placeholder="Ej: 012"
+                    className="w-full px-3 py-2.5 border border-zinc-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-rose-500 text-white bg-zinc-950 placeholder:text-zinc-600 text-sm"
+                  />
+                </div>
+                <div className="col-span-2">
+                  <label className="block text-xs font-bold text-zinc-400 mb-2 tracking-wider uppercase">Empresa *</label>
+                  <input
+                    type="text"
+                    value={formData.company}
+                    onChange={(e) => setFormData({ ...formData, company: e.target.value })}
+                    placeholder="Ej: Mercadona, Spotify..."
+                    className="w-full px-3 py-2.5 border border-zinc-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-rose-500 text-white bg-zinc-950 placeholder:text-zinc-600 text-sm"
+                  />
+                </div>
+              </div>
               <div>
-                <label className="block text-xs font-bold text-zinc-400 mb-2 tracking-wider uppercase">Descripción *</label>
+                <label className="block text-xs font-bold text-zinc-400 mb-2 tracking-wider uppercase">Descripción / Concepto</label>
                 <input
                   type="text"
-                  value={formData.company}
-                  onChange={(e) => setFormData({ ...formData, company: e.target.value, number: e.target.value })}
-                  placeholder="Ej: Mercadona, Spotify, Gasolina..."
+                  value={formData.description}
+                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                  placeholder="Ej: Compra mensual, Gasolina..."
                   className="w-full px-4 py-2.5 border border-zinc-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-rose-500 focus:border-rose-500 text-white bg-zinc-950 placeholder:text-zinc-600"
                 />
               </div>
@@ -2447,12 +2498,35 @@ export default function Dashboard() {
               </button>
             </div>
             <div className="space-y-4">
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-zinc-400 mb-2 tracking-wider uppercase">Nº Factura</label>
+                  <input
+                    type="text"
+                    value={formData.number}
+                    onChange={(e) => setFormData({ ...formData, number: e.target.value })}
+                    placeholder="012"
+                    className={`w-full px-3 py-2.5 border border-zinc-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-${ringColor}-500 text-white bg-zinc-950 text-sm`}
+                  />
+                </div>
+                <div className="col-span-2">
+                  <label className="block text-xs font-bold text-zinc-400 mb-2 tracking-wider uppercase">Empresa</label>
+                  <input
+                    type="text"
+                    value={formData.company}
+                    onChange={(e) => setFormData({ ...formData, company: e.target.value })}
+                    placeholder="Nombre empresa"
+                    className={`w-full px-3 py-2.5 border border-zinc-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-${ringColor}-500 text-white bg-zinc-950 text-sm`}
+                  />
+                </div>
+              </div>
               <div>
-                <label className="block text-xs font-bold text-zinc-400 mb-2 tracking-wider uppercase">Descripción</label>
+                <label className="block text-xs font-bold text-zinc-400 mb-2 tracking-wider uppercase">Descripción / Concepto</label>
                 <input
                   type="text"
-                  value={formData.company}
-                  onChange={(e) => setFormData({ ...formData, company: e.target.value, number: e.target.value })}
+                  value={formData.description}
+                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                  placeholder="Concepto facturado"
                   className={`w-full px-4 py-2.5 border border-zinc-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-${ringColor}-500 text-white bg-zinc-950`}
                 />
               </div>

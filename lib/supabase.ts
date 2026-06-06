@@ -12,6 +12,7 @@ export interface InvoiceDB {
   category: string;
   number: string;
   company: string;
+  description?: string;
   amount: number;
   amount_without_vat: number;
   vat: number;
