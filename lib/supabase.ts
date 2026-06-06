@@ -20,3 +20,4 @@ export interface InvoiceDB {
   has_invoice: boolean;
   created_at?: string;
 }
+// Supabase migration completed - Sat Jun  6 17:44:25 CEST 2026
