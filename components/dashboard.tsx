@@ -61,6 +61,7 @@ interface Invoice {
   fileName: string;
   method: string;
   hasInvoice?: boolean; // Si tiene factura → cuenta en contabilidad
+  paid?: boolean;       // Si está pagada o no
 }
 
 const CATEGORIES = ['comidas', 'caballo', 'deporte', 'work', 'ocio', 'caprichos', 'viajes', 'campo', 'regalos', 'coche', 'desayuno'];
@@ -496,6 +497,25 @@ export default function Dashboard() {
       });
     } catch (e) {
       console.error('Error toggling invoice:', e);
+    }
+  };
+
+  // Toggle "Pagado" para facturas
+  const togglePaid = async (id: string) => {
+    const invoice = invoices.find(i => i.id === id);
+    if (!invoice) return;
+    const updated = { ...invoice, paid: !invoice.paid };
+    // Optimistic update
+    setInvoices(invoices.map((inv) => inv.id === id ? updated : inv));
+    // Persistir en Supabase
+    try {
+      await fetch('/api/invoices', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updated),
+      });
+    } catch (e) {
+      console.error('Error toggling paid:', e);
     }
   };
 
@@ -1071,6 +1091,12 @@ export default function Dashboard() {
           const total = invoicesList.reduce((sum, i) => sum + i.amount, 0);
           const ivaTotal = total * 0.21;
 
+          // Calcular pagado vs pendiente
+          const paidInvoices = invoicesList.filter(i => i.paid);
+          const pendingInvoices = invoicesList.filter(i => !i.paid);
+          const paidAmount = paidInvoices.reduce((sum, i) => sum + i.amount, 0);
+          const pendingAmount = pendingInvoices.reduce((sum, i) => sum + i.amount, 0);
+
           // Agrupar por trimestre
           const quarters = [1, 2, 3, 4].map(q => {
             const qInvoices = invoicesList.filter(inv => {
@@ -1133,6 +1159,26 @@ export default function Dashboard() {
                 </div>
               </div>
 
+              {/* Estado de Pagos */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="bg-gradient-to-br from-emerald-500/10 to-zinc-900 rounded-xl border border-emerald-500/20 p-5">
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="text-xs font-bold text-emerald-400 tracking-widest uppercase">✓ Pagadas</p>
+                    <span className="bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-[10px] font-bold px-2 py-1 rounded">{paidInvoices.length}</span>
+                  </div>
+                  <p className="text-2xl font-bold text-emerald-400">{paidAmount.toFixed(2)}€</p>
+                  <p className="text-xs text-zinc-500 mt-1">{isIncome ? 'Dinero cobrado' : 'Dinero pagado'}</p>
+                </div>
+                <div className="bg-gradient-to-br from-amber-500/10 to-zinc-900 rounded-xl border border-amber-500/20 p-5">
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="text-xs font-bold text-amber-400 tracking-widest uppercase">⏳ Pendientes</p>
+                    <span className="bg-amber-500/20 text-amber-400 border border-amber-500/30 text-[10px] font-bold px-2 py-1 rounded">{pendingInvoices.length}</span>
+                  </div>
+                  <p className="text-2xl font-bold text-amber-400">{pendingAmount.toFixed(2)}€</p>
+                  <p className="text-xs text-zinc-500 mt-1">{isIncome ? 'Por cobrar' : 'Por pagar'}</p>
+                </div>
+              </div>
+
               {/* Desglose por Trimestre */}
               <div>
                 <h2 className="text-lg font-bold text-white tracking-tight mb-4">Desglose por Trimestre {new Date().getFullYear()}</h2>
@@ -1158,42 +1204,67 @@ export default function Dashboard() {
                     <table className="w-full">
                       <thead className="bg-zinc-950 border-b border-zinc-800">
                         <tr>
-                          <th className="text-left py-3 px-6 text-xs font-bold text-zinc-400 tracking-wider uppercase">Descripción</th>
-                          <th className="text-left py-3 px-6 text-xs font-bold text-zinc-400 tracking-wider uppercase">Categoría</th>
-                          <th className="text-left py-3 px-6 text-xs font-bold text-zinc-400 tracking-wider uppercase">Método</th>
-                          <th className="text-right py-3 px-6 text-xs font-bold text-zinc-400 tracking-wider uppercase">Base</th>
-                          <th className="text-right py-3 px-6 text-xs font-bold text-zinc-400 tracking-wider uppercase">IVA</th>
-                          <th className="text-right py-3 px-6 text-xs font-bold text-zinc-400 tracking-wider uppercase">Total</th>
-                          <th className="text-left py-3 px-6 text-xs font-bold text-zinc-400 tracking-wider uppercase">Fecha</th>
-                          <th className="text-center py-3 px-6 text-xs font-bold text-zinc-400 tracking-wider uppercase">Acciones</th>
+                          <th className="text-center py-3 px-3 text-xs font-bold text-zinc-400 tracking-wider uppercase">Nº</th>
+                          <th className="text-left py-3 px-4 text-xs font-bold text-zinc-400 tracking-wider uppercase">Empresa / Descripción</th>
+                          <th className="text-left py-3 px-3 text-xs font-bold text-zinc-400 tracking-wider uppercase">Categoría</th>
+                          <th className="text-left py-3 px-3 text-xs font-bold text-zinc-400 tracking-wider uppercase">Método</th>
+                          <th className="text-right py-3 px-3 text-xs font-bold text-zinc-400 tracking-wider uppercase">Base</th>
+                          <th className="text-right py-3 px-3 text-xs font-bold text-zinc-400 tracking-wider uppercase">IVA</th>
+                          <th className="text-right py-3 px-3 text-xs font-bold text-zinc-400 tracking-wider uppercase">Total</th>
+                          <th className="text-left py-3 px-3 text-xs font-bold text-zinc-400 tracking-wider uppercase">Fecha</th>
+                          <th className="text-center py-3 px-3 text-xs font-bold text-zinc-400 tracking-wider uppercase">Pagado</th>
+                          <th className="text-center py-3 px-3 text-xs font-bold text-zinc-400 tracking-wider uppercase">Acciones</th>
                         </tr>
                       </thead>
                       <tbody>
                         {invoicesList.map((inv, idx) => {
-                          // Usar el IVA real si existe, sino calcular al 21%
                           const base = inv.amountWithoutVAT > 0 ? inv.amountWithoutVAT : inv.amount / 1.21;
                           const iva = inv.vat > 0 ? inv.vat : inv.amount - base;
                           return (
                             <tr key={inv.id} className={`border-b border-zinc-800/50 hover:bg-zinc-800/30 transition-colors ${idx % 2 === 0 ? 'bg-zinc-900/50' : 'bg-zinc-900/20'}`}>
-                              <td className="py-3 px-6">
-                                <div className="font-semibold text-white text-sm">{inv.company}</div>
+                              <td className="py-3 px-3 text-center">
+                                <span className="inline-flex items-center justify-center min-w-[2.5rem] h-7 px-2 bg-zinc-800 border border-zinc-700 rounded text-xs font-bold text-white">
+                                  {inv.number || '-'}
+                                </span>
                               </td>
-                              <td className="py-3 px-6">
-                                <span className="bg-blue-500/10 text-blue-400 border border-blue-500/20 px-2 py-0.5 rounded-full text-xs">
+                              <td className="py-3 px-4">
+                                <div className="font-semibold text-white text-sm">{inv.company || '-'}</div>
+                                {inv.description && (
+                                  <div className="text-xs text-zinc-400 mt-0.5">{inv.description}</div>
+                                )}
+                              </td>
+                              <td className="py-3 px-3">
+                                <span className="bg-blue-500/10 text-blue-400 border border-blue-500/20 px-2 py-0.5 rounded-full text-xs whitespace-nowrap">
                                   {inv.category}
                                 </span>
                               </td>
-                              <td className="py-3 px-6">
-                                <span className="bg-violet-500/10 text-violet-400 border border-violet-500/20 px-2 py-0.5 rounded-full text-xs">
+                              <td className="py-3 px-3">
+                                <span className="bg-violet-500/10 text-violet-400 border border-violet-500/20 px-2 py-0.5 rounded-full text-xs whitespace-nowrap">
                                   {inv.method}
                                 </span>
                               </td>
-                              <td className="py-3 px-6 text-right text-zinc-300 text-sm">{base.toFixed(2)}€</td>
-                              <td className="py-3 px-6 text-right text-amber-400 text-sm">{iva.toFixed(2)}€</td>
-                              <td className={`py-3 px-6 text-right font-bold text-${colorClass}-400`}>{inv.amount.toFixed(2)}€</td>
-                              <td className="py-3 px-6 text-zinc-400 text-sm">{inv.date}</td>
-                              <td className="py-3 px-6 text-center">
-                                <div className="flex items-center justify-center gap-2">
+                              <td className="py-3 px-3 text-right text-zinc-300 text-sm whitespace-nowrap">{base.toFixed(2)}€</td>
+                              <td className="py-3 px-3 text-right text-amber-400 text-sm whitespace-nowrap">{iva.toFixed(2)}€</td>
+                              <td className={`py-3 px-3 text-right font-bold text-${colorClass}-400 whitespace-nowrap`}>{inv.amount.toFixed(2)}€</td>
+                              <td className="py-3 px-3 text-zinc-400 text-sm whitespace-nowrap">{inv.date}</td>
+                              <td className="py-3 px-3 text-center">
+                                <label className="inline-flex items-center cursor-pointer" title={inv.paid ? 'Pagado' : 'Pendiente'}>
+                                  <input
+                                    type="checkbox"
+                                    checked={inv.paid || false}
+                                    onChange={() => togglePaid(inv.id)}
+                                    className="sr-only peer"
+                                  />
+                                  <div className={`w-10 h-5 rounded-full transition-all relative ${inv.paid ? 'bg-emerald-500' : 'bg-zinc-700'}`}>
+                                    <div className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white transition-all ${inv.paid ? 'translate-x-5' : ''}`}></div>
+                                  </div>
+                                </label>
+                                <div className={`text-[10px] mt-1 font-semibold ${inv.paid ? 'text-emerald-400' : 'text-amber-400'}`}>
+                                  {inv.paid ? '✓ Pagada' : 'Pendiente'}
+                                </div>
+                              </td>
+                              <td className="py-3 px-3 text-center">
+                                <div className="flex items-center justify-center gap-1">
                                   <button
                                     onClick={() => startEditInvoice(inv)}
                                     className="text-blue-500 hover:text-blue-400 hover:bg-blue-500/10 p-2 rounded-lg transition-all"

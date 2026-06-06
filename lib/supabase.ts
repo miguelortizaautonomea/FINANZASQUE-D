@@ -20,5 +20,6 @@ export interface InvoiceDB {
   file_name: string;
   method: string;
   has_invoice: boolean;
+  paid?: boolean;
   created_at?: string;
 }

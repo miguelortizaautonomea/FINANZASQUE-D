@@ -17,6 +17,7 @@ function mapFromDB(row: any) {
     fileName: row.file_name,
     method: row.method,
     hasInvoice: row.has_invoice,
+    paid: row.paid || false,
   };
 }
 
@@ -36,6 +37,7 @@ function mapToDB(invoice: any) {
     file_name: invoice.fileName,
     method: invoice.method,
     has_invoice: invoice.hasInvoice || false,
+    paid: invoice.paid || false,
   };
 }
 
