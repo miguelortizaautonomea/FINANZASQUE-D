@@ -131,6 +131,7 @@ export default function Dashboard() {
     category: CATEGORIES[0],
     date: new Date().toISOString().split('T')[0],
     method: METHODS[0],
+    ivaPercent: '21', // % de IVA (21, 10, 4, 0)
   });
 
   // Función para refrescar/cargar datos
@@ -323,8 +324,18 @@ export default function Dashboard() {
     }
 
     const amount = parseFloat(formData.amount);
-    const amountWithoutVAT = parseFloat(formData.amountWithoutVAT || formData.amount);
-    const vat = amount - amountWithoutVAT;
+    const hasInvoice = !!selectedFile;
+
+    // Si tiene factura → calcular IVA basado en el porcentaje seleccionado
+    // El monto introducido es el total (con IVA), así que separamos
+    let amountWithoutVAT = amount;
+    let vat = 0;
+
+    if (hasInvoice) {
+      const ivaPercent = parseFloat(formData.ivaPercent || '21');
+      amountWithoutVAT = amount / (1 + ivaPercent / 100);
+      vat = amount - amountWithoutVAT;
+    }
 
     const newInvoice: Invoice = {
       id: Date.now().toString(),
@@ -338,7 +349,7 @@ export default function Dashboard() {
       date: formData.date,
       fileName: selectedFile?.name || 'manual',
       method: formData.method,
-      hasInvoice: !!selectedFile, // Si hay archivo, automáticamente marca que tiene factura
+      hasInvoice, // Si hay archivo, marca que tiene factura
     };
 
     // Optimistic update
@@ -363,6 +374,7 @@ export default function Dashboard() {
       category: CATEGORIES[0],
       date: new Date().toISOString().split('T')[0],
       method: METHODS[0],
+      ivaPercent: '21',
     });
     setSelectedFile(null);
 
@@ -441,6 +453,11 @@ export default function Dashboard() {
 
   const startEditInvoice = (invoice: Invoice) => {
     setEditingId(invoice.id);
+    // Calcular el porcentaje IVA actual del invoice
+    let ivaPercent = '21';
+    if (invoice.vat > 0 && invoice.amountWithoutVAT > 0) {
+      ivaPercent = String(Math.round((invoice.vat / invoice.amountWithoutVAT) * 100));
+    }
     setFormData({
       number: invoice.number,
       company: invoice.company,
@@ -449,6 +466,7 @@ export default function Dashboard() {
       category: invoice.category,
       date: invoice.date,
       method: invoice.method || METHODS[0],
+      ivaPercent,
     });
     setShowEditDialog(true);
   };
@@ -506,6 +524,7 @@ export default function Dashboard() {
       category: CATEGORIES[0],
       date: new Date().toISOString().split('T')[0],
       method: METHODS[0],
+      ivaPercent: '21',
     });
   };
 
@@ -535,15 +554,30 @@ export default function Dashboard() {
         return month >= startMonth && month < endMonth;
       });
 
-      const income = quarterInvoices.filter(i => i.type === 'income').reduce((sum, i) => sum + i.amount, 0);
-      const expenses = quarterInvoices.filter(i => i.type === 'expense').reduce((sum, i) => sum + i.amount, 0);
+      const incomeInvoices = quarterInvoices.filter(i => i.type === 'income');
+      const expenseInvoices = quarterInvoices.filter(i => i.type === 'expense');
+
+      const income = incomeInvoices.reduce((sum, i) => sum + i.amount, 0);
+      const expenses = expenseInvoices.reduce((sum, i) => sum + i.amount, 0);
       const benefit = income - expenses;
 
-      // Cálculos fiscales españoles (autónomos)
-      const ivaRepercutido = income * 0.21; // IVA cobrado
-      const ivaSoportado = expenses * 0.21; // IVA pagado deducible
+      // Cálculos fiscales españoles - USA EL IVA REAL DE CADA FACTURA
+      // Si la factura tiene vat > 0, usa ese; si no, asume 21% (default)
+      const ivaRepercutido = incomeInvoices.reduce((sum, i) =>
+        sum + (i.vat > 0 ? i.vat : i.amount - (i.amount / 1.21)), 0);
+      const ivaSoportado = expenseInvoices.reduce((sum, i) =>
+        sum + (i.vat > 0 ? i.vat : i.amount - (i.amount / 1.21)), 0);
+
       const ivaAPagar = Math.max(0, ivaRepercutido - ivaSoportado); // Modelo 303
-      const irpfRetencion = Math.max(0, benefit * 0.20); // Modelo 130 (20% pago a cuenta)
+
+      // IRPF se calcula sobre la base imponible (sin IVA)
+      const baseIngresos = incomeInvoices.reduce((sum, i) =>
+        sum + (i.amountWithoutVAT > 0 ? i.amountWithoutVAT : i.amount / 1.21), 0);
+      const baseGastos = expenseInvoices.reduce((sum, i) =>
+        sum + (i.amountWithoutVAT > 0 ? i.amountWithoutVAT : i.amount / 1.21), 0);
+      const baseBeneficio = baseIngresos - baseGastos;
+
+      const irpfRetencion = Math.max(0, baseBeneficio * 0.20); // Modelo 130 (20%)
       const totalImpuestos = ivaAPagar + irpfRetencion;
       const beneficioNeto = benefit - totalImpuestos;
 
@@ -1981,6 +2015,49 @@ export default function Dashboard() {
                   <div className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white transition-all ${selectedFile ? 'translate-x-5' : ''}`}></div>
                 </div>
               </label>
+
+              {/* IVA selector - solo si tiene factura */}
+              {selectedFile && (
+                <div className="bg-gradient-to-br from-amber-500/5 to-zinc-900 border border-amber-500/20 rounded-lg p-4 space-y-3">
+                  <div className="flex items-center gap-2 mb-1">
+                    <Percent size={14} className="text-amber-400" />
+                    <p className="text-xs font-bold text-amber-400 tracking-wider uppercase">IVA Repercutido</p>
+                  </div>
+                  <select
+                    value={formData.ivaPercent}
+                    onChange={(e) => setFormData({ ...formData, ivaPercent: e.target.value })}
+                    className="w-full px-3 py-2 border border-zinc-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500 text-white bg-zinc-950 text-sm"
+                  >
+                    <option value="21">21% (General)</option>
+                    <option value="10">10% (Reducido)</option>
+                    <option value="4">4% (Superreducido)</option>
+                    <option value="0">0% (Exento)</option>
+                  </select>
+                  {formData.amount && (
+                    <div className="grid grid-cols-3 gap-2 text-center pt-2 border-t border-zinc-800">
+                      <div>
+                        <p className="text-[10px] text-zinc-500 uppercase tracking-wider">Base</p>
+                        <p className="text-sm font-bold text-white">
+                          {(parseFloat(formData.amount) / (1 + parseFloat(formData.ivaPercent) / 100)).toFixed(2)}€
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] text-zinc-500 uppercase tracking-wider">IVA</p>
+                        <p className="text-sm font-bold text-amber-400">
+                          {(parseFloat(formData.amount) - parseFloat(formData.amount) / (1 + parseFloat(formData.ivaPercent) / 100)).toFixed(2)}€
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] text-zinc-500 uppercase tracking-wider">Total</p>
+                        <p className="text-sm font-bold text-emerald-400">
+                          {parseFloat(formData.amount).toFixed(2)}€
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
               <div className="flex gap-3 pt-2">
                 <button
                   onClick={() => setShowIncomeDialog(false)}
@@ -2101,6 +2178,49 @@ export default function Dashboard() {
                   <div className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white transition-all ${selectedFile ? 'translate-x-5' : ''}`}></div>
                 </div>
               </label>
+
+              {/* IVA selector - solo si tiene factura */}
+              {selectedFile && (
+                <div className="bg-gradient-to-br from-amber-500/5 to-zinc-900 border border-amber-500/20 rounded-lg p-4 space-y-3">
+                  <div className="flex items-center gap-2 mb-1">
+                    <Percent size={14} className="text-amber-400" />
+                    <p className="text-xs font-bold text-amber-400 tracking-wider uppercase">IVA Soportado</p>
+                  </div>
+                  <select
+                    value={formData.ivaPercent}
+                    onChange={(e) => setFormData({ ...formData, ivaPercent: e.target.value })}
+                    className="w-full px-3 py-2 border border-zinc-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500 text-white bg-zinc-950 text-sm"
+                  >
+                    <option value="21">21% (General)</option>
+                    <option value="10">10% (Reducido)</option>
+                    <option value="4">4% (Superreducido)</option>
+                    <option value="0">0% (Exento)</option>
+                  </select>
+                  {formData.amount && (
+                    <div className="grid grid-cols-3 gap-2 text-center pt-2 border-t border-zinc-800">
+                      <div>
+                        <p className="text-[10px] text-zinc-500 uppercase tracking-wider">Base</p>
+                        <p className="text-sm font-bold text-white">
+                          {(parseFloat(formData.amount) / (1 + parseFloat(formData.ivaPercent) / 100)).toFixed(2)}€
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] text-zinc-500 uppercase tracking-wider">IVA</p>
+                        <p className="text-sm font-bold text-amber-400">
+                          {(parseFloat(formData.amount) - parseFloat(formData.amount) / (1 + parseFloat(formData.ivaPercent) / 100)).toFixed(2)}€
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] text-zinc-500 uppercase tracking-wider">Total</p>
+                        <p className="text-sm font-bold text-rose-400">
+                          {parseFloat(formData.amount).toFixed(2)}€
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
               <div className="flex gap-3 pt-2">
                 <button
                   onClick={() => setShowExpenseDialog(false)}
