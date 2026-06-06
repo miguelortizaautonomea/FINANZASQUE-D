@@ -55,6 +55,7 @@ interface Invoice {
   date: string;
   fileName: string;
   method: string;
+  hasInvoice?: boolean; // Si tiene factura → cuenta en contabilidad
 }
 
 const CATEGORIES = ['comidas', 'caballo', 'deporte', 'work', 'ocio', 'caprichos', 'viajes', 'campo', 'regalos', 'coche', 'desayuno'];
@@ -72,9 +73,12 @@ export default function Dashboard() {
   const [showEditDialog, setShowEditDialog] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
 
-  // Filtros para gráficos y métricas (arriba)
-  const [chartDateFrom, setChartDateFrom] = useState<string>('');
-  const [chartDateTo, setChartDateTo] = useState<string>('');
+  // Filtros para gráficos y métricas (arriba) - Por defecto MES ACTUAL hasta HOY
+  const _today = new Date();
+  const _firstDay = new Date(_today.getFullYear(), _today.getMonth(), 1).toISOString().split('T')[0];
+  const _todayStr = _today.toISOString().split('T')[0];
+  const [chartDateFrom, setChartDateFrom] = useState<string>(_firstDay);
+  const [chartDateTo, setChartDateTo] = useState<string>(_todayStr);
   const [chartFilterType, setChartFilterType] = useState<'all' | 'income' | 'expense'>('all');
 
   // Filtros para tabla (abajo) - Por defecto MES ACTUAL
@@ -93,6 +97,9 @@ export default function Dashboard() {
 
   // Rango de tiempo para gráfico de tendencia
   const [trendRange, setTrendRange] = useState<'ytd' | '90days' | '30days'>('ytd');
+
+  // Filtro de mes para vista Categorías
+  const [categoryMonth, setCategoryMonth] = useState<string>('all'); // 'all' o '2026-06'
   const fileInputRef = useRef<HTMLInputElement>(null);
   const csvInputRef = useRef<HTMLInputElement>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -353,6 +360,12 @@ export default function Dashboard() {
     setInvoices(invoices.filter((inv) => inv.id !== id));
   };
 
+  const toggleInvoice = (id: string) => {
+    setInvoices(invoices.map((inv) =>
+      inv.id === id ? { ...inv, hasInvoice: !inv.hasInvoice } : inv
+    ));
+  };
+
   const startEditInvoice = (invoice: Invoice) => {
     setEditingId(invoice.id);
     setFormData({
@@ -417,10 +430,13 @@ export default function Dashboard() {
     setSortBy('date-desc');
   };
 
-  // Cálculos de Contabilidad - Por Trimestre
+  // Cálculos de Contabilidad - Por Trimestre (SOLO transacciones CON FACTURA)
   const accountingData = useMemo(() => {
     const currentYear = new Date().getFullYear();
-    const yearInvoices = invoices.filter(inv => new Date(inv.date).getFullYear() === currentYear);
+    const yearInvoices = invoices.filter(inv =>
+      new Date(inv.date).getFullYear() === currentYear &&
+      inv.hasInvoice === true // SOLO las marcadas con factura
+    );
 
     const calculateQuarter = (q: number) => {
       const startMonth = (q - 1) * 3;
@@ -546,19 +562,6 @@ export default function Dashboard() {
           })}
         </nav>
 
-        {/* Bottom Stats */}
-        <div className="p-3 border-t border-zinc-800/50">
-          <div className="bg-gradient-to-br from-zinc-900 to-zinc-900/50 border border-zinc-800 rounded-xl p-4">
-            <div className="flex items-center justify-between mb-2">
-              <p className="text-[10px] text-zinc-500 font-bold tracking-wider uppercase">Balance</p>
-              <div className={`w-2 h-2 rounded-full ${accountingData.year.benefit >= 0 ? 'bg-emerald-400' : 'bg-rose-400'} animate-pulse`}></div>
-            </div>
-            <p className={`text-xl font-bold ${accountingData.year.benefit >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-              {accountingData.year.benefit >= 0 ? '+' : ''}{accountingData.year.benefit.toFixed(0)}€
-            </p>
-            <p className="text-[10px] text-zinc-600 mt-1">Año {new Date().getFullYear()}</p>
-          </div>
-        </div>
       </aside>
     );
   };
@@ -810,27 +813,136 @@ export default function Dashboard() {
         {/* CONTENIDO PRINCIPAL */}
         {activeView === 'accounting' && <AccountingView />}
 
-        {activeView === 'categories' && (
-          <div className="bg-zinc-900 rounded-xl border border-zinc-800 p-8">
-            <h1 className="text-2xl font-bold text-white mb-4 flex items-center gap-2">
-              <Tag className="text-blue-400" /> Categorías
-            </h1>
-            <p className="text-zinc-400 mb-6">Resumen de tus categorías de gasto</p>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              {CATEGORIES.map((cat) => {
-                const total = invoices.filter(i => i.category === cat).reduce((sum, i) => sum + i.amount, 0);
-                const count = invoices.filter(i => i.category === cat).length;
-                return (
-                  <div key={cat} className="bg-zinc-950 border border-zinc-800 rounded-lg p-4">
-                    <p className="text-xs text-zinc-500 uppercase font-semibold">{cat}</p>
-                    <p className="text-xl font-bold text-white mt-1">{total.toFixed(2)}€</p>
-                    <p className="text-xs text-zinc-500 mt-1">{count} registros</p>
+        {activeView === 'categories' && (() => {
+          // Obtener meses disponibles
+          const availableMonths = Array.from(new Set(
+            invoices.map(inv => inv.date.slice(0, 7))
+          )).sort().reverse();
+
+          // Filtrar facturas por mes seleccionado
+          const filteredByMonth = categoryMonth === 'all'
+            ? invoices
+            : invoices.filter(inv => inv.date.startsWith(categoryMonth));
+
+          // Calcular totales por categoría (solo gastos)
+          const categoryStats = CATEGORIES.map((cat) => {
+            const catInvoices = filteredByMonth.filter(i => i.category === cat && i.type === 'expense');
+            return {
+              cat,
+              total: catInvoices.reduce((sum, i) => sum + i.amount, 0),
+              count: catInvoices.length,
+            };
+          }).filter(c => c.count > 0).sort((a, b) => b.total - a.total);
+
+          const totalGastos = categoryStats.reduce((sum, c) => sum + c.total, 0);
+
+          const monthLabel = categoryMonth === 'all'
+            ? 'Todos los meses'
+            : new Date(categoryMonth + '-01').toLocaleDateString('es-ES', { month: 'long', year: 'numeric' });
+
+          return (
+            <div className="space-y-6">
+              {/* Hero Header */}
+              <div className="relative bg-gradient-to-br from-zinc-900 via-zinc-900 to-violet-950/30 rounded-2xl p-8 border border-zinc-800 overflow-hidden">
+                <div className="absolute top-0 right-0 w-96 h-96 bg-violet-500/5 rounded-full -mr-48 -mt-48 blur-3xl"></div>
+                <div className="relative flex items-center justify-between">
+                  <div className="flex items-center gap-5">
+                    <div className="bg-gradient-to-br from-violet-500 to-purple-600 p-4 rounded-2xl shadow-lg shadow-violet-500/20">
+                      <Tag size={32} className="text-white" />
+                    </div>
+                    <div>
+                      <h1 className="text-3xl font-bold text-white tracking-tight">Categorías</h1>
+                      <p className="text-zinc-400 text-sm mt-1">Resumen por categoría · <span className="text-violet-400 font-semibold">{monthLabel}</span></p>
+                    </div>
                   </div>
-                );
-              })}
+                </div>
+              </div>
+
+              {/* Filtros de Mes */}
+              <div className="bg-zinc-900 rounded-xl border border-zinc-800 p-5">
+                <div className="flex items-center gap-3 mb-4">
+                  <Calendar className="text-violet-400" size={18} />
+                  <h3 className="text-sm font-bold text-white">Filtrar por Mes</h3>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    onClick={() => setCategoryMonth('all')}
+                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                      categoryMonth === 'all'
+                        ? 'bg-gradient-to-r from-violet-500 to-purple-600 text-white shadow-lg shadow-violet-500/20'
+                        : 'bg-zinc-950 text-zinc-400 border border-zinc-800 hover:border-zinc-700 hover:text-white'
+                    }`}
+                  >
+                    Todos
+                  </button>
+                  {availableMonths.map((month) => {
+                    const date = new Date(month + '-01');
+                    const label = date.toLocaleDateString('es-ES', { month: 'short', year: '2-digit' });
+                    return (
+                      <button
+                        key={month}
+                        onClick={() => setCategoryMonth(month)}
+                        className={`px-4 py-2 rounded-lg text-sm font-medium transition-all capitalize ${
+                          categoryMonth === month
+                            ? 'bg-gradient-to-r from-violet-500 to-purple-600 text-white shadow-lg shadow-violet-500/20'
+                            : 'bg-zinc-950 text-zinc-400 border border-zinc-800 hover:border-zinc-700 hover:text-white'
+                        }`}
+                      >
+                        {label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Total */}
+              <div className="bg-gradient-to-br from-rose-500/10 to-zinc-900 rounded-xl border border-rose-500/20 p-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-xs font-bold text-rose-400 tracking-widest uppercase mb-2">Total Gastos</p>
+                    <p className="text-4xl font-bold text-white">{totalGastos.toFixed(2)}€</p>
+                    <p className="text-xs text-zinc-500 mt-1">{categoryStats.length} categorías activas</p>
+                  </div>
+                  <TrendingDown size={48} className="text-rose-400/30" />
+                </div>
+              </div>
+
+              {/* Categorías con barras de progreso */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {categoryStats.length === 0 ? (
+                  <div className="col-span-2 bg-zinc-900 border border-zinc-800 rounded-xl p-12 text-center">
+                    <p className="text-zinc-500">No hay datos para el período seleccionado</p>
+                  </div>
+                ) : (
+                  categoryStats.map((c, idx) => {
+                    const percentage = totalGastos > 0 ? (c.total / totalGastos) * 100 : 0;
+                    const colors = ['emerald', 'blue', 'violet', 'rose', 'orange', 'cyan', 'pink', 'amber', 'teal', 'indigo', 'lime'];
+                    const color = colors[idx % colors.length];
+                    return (
+                      <div key={c.cat} className="bg-zinc-900 border border-zinc-800 rounded-xl p-5 hover:border-zinc-700 transition-all">
+                        <div className="flex items-center justify-between mb-3">
+                          <div className="flex items-center gap-2">
+                            <div className={`w-2 h-2 rounded-full bg-${color}-400`}></div>
+                            <p className="text-sm font-bold text-white capitalize">{c.cat}</p>
+                          </div>
+                          <span className="text-xs text-zinc-500">{c.count} reg.</span>
+                        </div>
+                        <p className="text-2xl font-bold text-white mb-3">{c.total.toFixed(2)}€</p>
+                        <div className="w-full bg-zinc-800 rounded-full h-2 overflow-hidden">
+                          <div
+                            className={`h-full bg-gradient-to-r from-${color}-500 to-${color}-400 rounded-full transition-all`}
+                            style={{ width: `${percentage}%` }}
+                          ></div>
+                        </div>
+                        <p className="text-xs text-zinc-500 mt-2">{percentage.toFixed(1)}% del total</p>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
             </div>
-          </div>
-        )}
+          );
+        })()}
 
         {activeView === 'settings' && (
           <div className="bg-zinc-900 rounded-xl border border-zinc-800 p-8">
@@ -969,7 +1081,7 @@ export default function Dashboard() {
 
         {/* Charts */}
         {monthlyTrend.length > 0 && (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+          <div className="grid grid-cols-1 gap-8 mb-8">
             {/* Tendencia Mensual */}
             <div className="bg-zinc-900 rounded-xl border border-zinc-800 p-6">
               <div className="flex items-center justify-between mb-6">
@@ -1007,7 +1119,7 @@ export default function Dashboard() {
                   </button>
                 </div>
               </div>
-              <ResponsiveContainer width="100%" height={300}>
+              <ResponsiveContainer width="100%" height={400}>
                 <LineChart data={monthlyTrend}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
                   <XAxis dataKey="month" stroke="#71717a" />
@@ -1050,7 +1162,7 @@ export default function Dashboard() {
                 </div>
 
                 {categoryChartType === 'bar' ? (
-                  <ResponsiveContainer width="100%" height={300}>
+                  <ResponsiveContainer width="100%" height={400}>
                     <BarChart data={categoryExpenses}>
                       <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
                       <XAxis dataKey="name" stroke="#71717a" angle={-45} textAnchor="end" height={100} />
@@ -1061,7 +1173,7 @@ export default function Dashboard() {
                   </ResponsiveContainer>
                 ) : (
                   <div>
-                    <ResponsiveContainer width="100%" height={300}>
+                    <ResponsiveContainer width="100%" height={400}>
                       <PieChart>
                         <Pie
                           data={categoryExpenses}
@@ -1275,6 +1387,7 @@ export default function Dashboard() {
                     <th className="text-left py-4 px-6 text-sm font-semibold text-zinc-300">Método</th>
                     <th className="text-right py-4 px-6 text-sm font-semibold text-zinc-300">Monto</th>
                     <th className="text-left py-4 px-6 text-sm font-semibold text-zinc-300">Fecha</th>
+                    <th className="text-center py-4 px-6 text-sm font-semibold text-zinc-300" title="Marcar si tiene factura para contabilidad">📄 Factura</th>
                     <th className="text-center py-4 px-6 text-sm font-semibold text-zinc-300">Acciones</th>
                   </tr>
                 </thead>
@@ -1316,17 +1429,36 @@ export default function Dashboard() {
                       </td>
                       <td className="py-4 px-6 text-zinc-400 text-sm">{invoice.date}</td>
                       <td className="py-4 px-6 text-center">
+                        <label className="inline-flex items-center cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={invoice.hasInvoice || false}
+                            onChange={() => toggleInvoice(invoice.id)}
+                            className="sr-only peer"
+                          />
+                          <div className={`w-10 h-5 rounded-full transition-all relative ${
+                            invoice.hasInvoice
+                              ? 'bg-emerald-500'
+                              : 'bg-zinc-700'
+                          }`}>
+                            <div className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white transition-all ${
+                              invoice.hasInvoice ? 'translate-x-5' : ''
+                            }`}></div>
+                          </div>
+                        </label>
+                      </td>
+                      <td className="py-4 px-6 text-center">
                         <div className="flex items-center justify-center gap-2">
                           <button
                             onClick={() => startEditInvoice(invoice)}
-                            className="text-blue-500 hover:text-blue-400 hover:bg-blue-50 p-2 rounded-lg transition-all"
+                            className="text-blue-500 hover:text-blue-400 hover:bg-blue-500/10 p-2 rounded-lg transition-all"
                             title="Editar"
                           >
                             ✏️
                           </button>
                           <button
                             onClick={() => deleteInvoice(invoice.id)}
-                            className="text-red-500 hover:text-red-700 hover:bg-red-50 p-2 rounded-lg transition-all"
+                            className="text-rose-500 hover:text-rose-400 hover:bg-rose-500/10 p-2 rounded-lg transition-all"
                             title="Eliminar"
                           >
                             <Trash2 size={18} />
