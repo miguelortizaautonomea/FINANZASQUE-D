@@ -220,9 +220,10 @@ export async function POST(req: NextRequest) {
     // Convertir File a Buffer
     const buffer = Buffer.from(await file.arrayBuffer());
 
-    // Extraer texto del PDF usando pdf-parse
-    const pdfParseModule: any = await import('pdf-parse');
-    const pdfParse = pdfParseModule.default || pdfParseModule;
+    // Extraer texto del PDF usando pdf-parse (v1.1.1)
+    // pdf-parse tiene un bug donde intenta leer un test file en producción
+    // Hay que importarlo así para evitarlo
+    const pdfParse: any = require('pdf-parse/lib/pdf-parse.js');
     const pdfData = await pdfParse(buffer);
     const text = pdfData.text;
 
