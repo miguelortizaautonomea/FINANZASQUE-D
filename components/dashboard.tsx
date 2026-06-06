@@ -1080,7 +1080,12 @@ export default function Dashboard() {
               i.hasInvoice === true &&
               i.date >= minDate
             )
-            .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+            // Ordenar por número de factura (12, 13, 14, 15...)
+            .sort((a, b) => {
+              const numA = parseInt(a.number) || 0;
+              const numB = parseInt(b.number) || 0;
+              return numA - numB;
+            });
 
           // Función para abrir el modal con "Tiene factura" pre-activado
           const openInvoiceDialog = () => {
