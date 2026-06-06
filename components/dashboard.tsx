@@ -387,7 +387,8 @@ export default function Dashboard() {
     const newInvoice: Invoice = {
       id: Date.now().toString(),
       type,
-      category: type === 'expense' ? formData.category : 'Ingreso',
+      // Los ingresos siempre son categoría 'work' (facturas de trabajo)
+      category: type === 'income' ? 'work' : formData.category,
       number: formData.number || `MAN-${Date.now()}`,
       company: formData.company,
       description: formData.description || undefined,
@@ -396,7 +397,8 @@ export default function Dashboard() {
       vat,
       date: formData.date,
       fileName: selectedFile?.name || 'manual',
-      method: formData.method,
+      // Los ingresos siempre son por 'Transferencia'
+      method: type === 'income' ? 'Transferencia' : formData.method,
       hasInvoice,
     };
 
@@ -563,6 +565,8 @@ export default function Dashboard() {
     const updatedInvoice = invoices.find(i => i.id === editingId);
     if (!updatedInvoice) return;
 
+    // Si es ingreso → categoría 'work' y método 'Transferencia' fijos
+    const isIncomeEdit = updatedInvoice.type === 'income';
     const finalInvoice = {
       ...updatedInvoice,
       number: formData.number,
@@ -572,8 +576,8 @@ export default function Dashboard() {
       amountWithoutVAT,
       vat,
       date: formData.date,
-      category: formData.category,
-      method: formData.method,
+      category: isIncomeEdit ? 'work' : formData.category,
+      method: isIncomeEdit ? 'Transferencia' : formData.method,
       hasInvoice,
     };
 
@@ -2228,17 +2232,17 @@ export default function Dashboard() {
                   />
                 </div>
               </div>
-              <div>
-                <label className="block text-xs font-bold text-zinc-400 mb-2 tracking-wider uppercase">Método de Pago</label>
-                <select
-                  value={formData.method}
-                  onChange={(e) => setFormData({ ...formData, method: e.target.value })}
-                  className="w-full px-4 py-2.5 border border-zinc-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 text-white bg-zinc-950"
-                >
-                  {METHODS.map((m) => (
-                    <option key={m} value={m}>{m}</option>
-                  ))}
-                </select>
+              {/* Categoría y Método son automáticos para ingresos: work + Transferencia */}
+              <div className="bg-zinc-950 border border-zinc-800 rounded-lg p-3 flex items-center gap-3">
+                <div className="flex items-center gap-2 text-xs">
+                  <span className="text-zinc-500 uppercase tracking-wider">Categoría:</span>
+                  <span className="bg-blue-500/10 text-blue-400 border border-blue-500/20 px-2 py-0.5 rounded-full font-semibold">work</span>
+                </div>
+                <span className="text-zinc-700">·</span>
+                <div className="flex items-center gap-2 text-xs">
+                  <span className="text-zinc-500 uppercase tracking-wider">Método:</span>
+                  <span className="bg-violet-500/10 text-violet-400 border border-violet-500/20 px-2 py-0.5 rounded-full font-semibold">Transferencia</span>
+                </div>
               </div>
               <label className="flex items-center justify-between p-3 bg-zinc-950 border border-zinc-800 rounded-lg cursor-pointer hover:border-emerald-500/30 transition-all">
                 <div className="flex items-center gap-3">
@@ -2625,32 +2629,48 @@ export default function Dashboard() {
                   />
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-bold text-zinc-400 mb-2 tracking-wider uppercase">Categoría</label>
-                  <select
-                    value={formData.category}
-                    onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-                    className={`w-full px-4 py-2.5 border border-zinc-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-${ringColor}-500 text-white bg-zinc-950`}
-                  >
-                    {CATEGORIES.map((cat) => (
-                      <option key={cat} value={cat}>{cat}</option>
-                    ))}
-                  </select>
+              {/* Para INGRESOS: mostrar etiquetas fijas (work + Transferencia) */}
+              {isIncome ? (
+                <div className="bg-zinc-950 border border-zinc-800 rounded-lg p-3 flex items-center gap-3">
+                  <div className="flex items-center gap-2 text-xs">
+                    <span className="text-zinc-500 uppercase tracking-wider">Categoría:</span>
+                    <span className="bg-blue-500/10 text-blue-400 border border-blue-500/20 px-2 py-0.5 rounded-full font-semibold">work</span>
+                  </div>
+                  <span className="text-zinc-700">·</span>
+                  <div className="flex items-center gap-2 text-xs">
+                    <span className="text-zinc-500 uppercase tracking-wider">Método:</span>
+                    <span className="bg-violet-500/10 text-violet-400 border border-violet-500/20 px-2 py-0.5 rounded-full font-semibold">Transferencia</span>
+                  </div>
                 </div>
-                <div>
-                  <label className="block text-xs font-bold text-zinc-400 mb-2 tracking-wider uppercase">Método</label>
-                  <select
-                    value={formData.method}
-                    onChange={(e) => setFormData({ ...formData, method: e.target.value })}
-                    className={`w-full px-4 py-2.5 border border-zinc-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-${ringColor}-500 text-white bg-zinc-950`}
-                  >
-                    {METHODS.map((m) => (
-                      <option key={m} value={m}>{m}</option>
-                    ))}
-                  </select>
+              ) : (
+                /* Para GASTOS: mostrar selectores normales */
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-bold text-zinc-400 mb-2 tracking-wider uppercase">Categoría</label>
+                    <select
+                      value={formData.category}
+                      onChange={(e) => setFormData({ ...formData, category: e.target.value })}
+                      className={`w-full px-4 py-2.5 border border-zinc-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-${ringColor}-500 text-white bg-zinc-950`}
+                    >
+                      {CATEGORIES.map((cat) => (
+                        <option key={cat} value={cat}>{cat}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-zinc-400 mb-2 tracking-wider uppercase">Método</label>
+                    <select
+                      value={formData.method}
+                      onChange={(e) => setFormData({ ...formData, method: e.target.value })}
+                      className={`w-full px-4 py-2.5 border border-zinc-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-${ringColor}-500 text-white bg-zinc-950`}
+                    >
+                      {METHODS.map((m) => (
+                        <option key={m} value={m}>{m}</option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
-              </div>
+              )}
 
               {/* Toggle Tiene factura */}
               <label className={`flex items-center justify-between p-3 bg-zinc-950 border border-zinc-800 rounded-lg cursor-pointer hover:border-${ringColor}-500/30 transition-all`}>
