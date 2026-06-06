@@ -25,6 +25,10 @@ import {
   FileText,
   CheckCircle,
   AlertCircle,
+  RefreshCw,
+  Sun,
+  Moon,
+  Plus,
 } from 'lucide-react';
 import {
   LineChart,
@@ -95,8 +99,14 @@ export default function Dashboard() {
   // Tipo de gráfico para categorías
   const [categoryChartType, setCategoryChartType] = useState<'bar' | 'pie'>('bar');
 
-  // Rango de tiempo para gráfico de tendencia
-  const [trendRange, setTrendRange] = useState<'ytd' | '90days' | '30days'>('ytd');
+  // Rango de tiempo para gráfico de tendencia - Por defecto MES ACTUAL
+  const [trendRange, setTrendRange] = useState<'currentMonth' | 'ytd' | '90days' | '30days'>('currentMonth');
+
+  // Tema claro/oscuro
+  const [theme, setTheme] = useState<'dark' | 'light'>('dark');
+
+  // Estado de refresh
+  const [refreshing, setRefreshing] = useState(false);
 
   // Filtro de mes para vista Categorías
   const [categoryMonth, setCategoryMonth] = useState<string>('all'); // 'all' o '2026-06'
@@ -114,9 +124,26 @@ export default function Dashboard() {
     method: METHODS[0],
   });
 
+  // Función para refrescar/cargar datos
+  const loadInvoices = async () => {
+    try {
+      setRefreshing(true);
+      const response = await fetch('/api/invoices');
+      const data = await response.json();
+      if (data.invoices) {
+        setInvoices(data.invoices);
+      }
+    } catch (error) {
+      console.error('Error loading invoices:', error);
+    } finally {
+      setLoading(false);
+      setTimeout(() => setRefreshing(false), 500);
+    }
+  };
+
   // Load invoices from API on mount
   useEffect(() => {
-    const loadInvoices = async () => {
+    const loadInvoicesInitial = async () => {
       try {
         const response = await fetch('/api/invoices');
         const data = await response.json();
@@ -130,7 +157,7 @@ export default function Dashboard() {
       }
     };
 
-    loadInvoices();
+    loadInvoicesInitial();
   }, []);
 
   // Filtered data for CHARTS (top section)
@@ -222,7 +249,10 @@ export default function Dashboard() {
     let startDateStr: string;
 
     // Calcular fecha de inicio según el rango
-    if (trendRange === '30days') {
+    if (trendRange === 'currentMonth') {
+      // Mes actual: desde el día 1 del mes
+      startDateStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-01`;
+    } else if (trendRange === '30days') {
       const d = new Date(today);
       d.setDate(d.getDate() - 30);
       startDateStr = d.toISOString().split('T')[0];
@@ -277,8 +307,9 @@ export default function Dashboard() {
   }, [chartFilteredInvoices]);
 
   const handleAddInvoice = (type: 'income' | 'expense') => {
-    if (!formData.number || !formData.company || !formData.amount || !selectedFile) {
-      alert('Por favor completa todos los campos');
+    // PDF es OPCIONAL - solo requiere descripción y monto
+    if (!formData.company || !formData.amount) {
+      alert('Por favor completa al menos: Descripción y Monto');
       return;
     }
 
@@ -290,14 +321,15 @@ export default function Dashboard() {
       id: Date.now().toString(),
       type,
       category: type === 'expense' ? formData.category : 'Ingreso',
-      number: formData.number,
+      number: formData.number || `MAN-${Date.now()}`,
       company: formData.company,
       amount,
       amountWithoutVAT,
       vat,
       date: formData.date,
-      fileName: selectedFile.name,
+      fileName: selectedFile?.name || 'manual',
       method: formData.method,
+      hasInvoice: !!selectedFile, // Si hay archivo, automáticamente marca que tiene factura
     };
 
     setInvoices([...invoices, newInvoice]);
@@ -562,6 +594,38 @@ export default function Dashboard() {
           })}
         </nav>
 
+        {/* Acciones rápidas */}
+        <div className="p-3 border-t border-zinc-800/50 space-y-2">
+          <p className="text-[10px] text-zinc-600 font-bold tracking-widest uppercase px-3 mb-2">Acciones</p>
+
+          {/* Refresh */}
+          <button
+            onClick={loadInvoices}
+            disabled={refreshing}
+            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-zinc-400 hover:bg-zinc-900 hover:text-white transition-all group"
+          >
+            <RefreshCw size={18} className={`text-zinc-500 group-hover:text-emerald-400 ${refreshing ? 'animate-spin text-emerald-400' : ''}`} />
+            <span className="font-medium text-sm">{refreshing ? 'Actualizando...' : 'Actualizar Datos'}</span>
+          </button>
+
+          {/* Theme Toggle */}
+          <button
+            onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+            className="w-full flex items-center justify-between gap-3 px-3 py-2.5 rounded-lg text-zinc-400 hover:bg-zinc-900 hover:text-white transition-all group"
+          >
+            <div className="flex items-center gap-3">
+              {theme === 'dark' ? (
+                <Moon size={18} className="text-zinc-500 group-hover:text-amber-400" />
+              ) : (
+                <Sun size={18} className="text-amber-400" />
+              )}
+              <span className="font-medium text-sm">Modo {theme === 'dark' ? 'Oscuro' : 'Claro'}</span>
+            </div>
+            <div className={`w-9 h-5 rounded-full relative transition-all ${theme === 'dark' ? 'bg-zinc-700' : 'bg-amber-500'}`}>
+              <div className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white transition-all ${theme === 'light' ? 'translate-x-4' : ''}`}></div>
+            </div>
+          </button>
+        </div>
       </aside>
     );
   };
@@ -653,17 +717,17 @@ export default function Dashboard() {
             <p className="text-2xl font-bold text-rose-400">{accountingData.year.irpf.toFixed(2)}€</p>
           </div>
 
-          <div className="bg-zinc-800 border border-zinc-700 rounded-lg p-6">
+          <div className="bg-gradient-to-br from-amber-500/10 to-zinc-900 border border-amber-500/30 rounded-xl p-6 hover:border-amber-500/50 transition-all">
             <div className="flex items-center gap-3 mb-3">
-              <div className="bg-slate-700 text-white p-2 rounded-lg">
-                <AlertCircle size={20} />
+              <div className="bg-gradient-to-br from-amber-500 to-yellow-600 text-white p-2.5 rounded-xl shadow-lg shadow-amber-500/20">
+                <AlertCircle size={18} />
               </div>
               <div>
-                <p className="text-sm font-semibold text-zinc-300">TOTAL IMPUESTOS</p>
-                <p className="text-xs text-zinc-500">IVA + IRPF</p>
+                <p className="text-xs font-bold text-white tracking-wide">TOTAL IMPUESTOS</p>
+                <p className="text-[10px] text-zinc-500 tracking-wider uppercase">IVA + IRPF</p>
               </div>
             </div>
-            <p className="text-2xl font-bold text-slate-800">{accountingData.year.totalImpuestos.toFixed(2)}€</p>
+            <p className="text-3xl font-bold text-amber-400">{accountingData.year.totalImpuestos.toFixed(2)}€</p>
           </div>
         </div>
       </div>
@@ -762,7 +826,7 @@ export default function Dashboard() {
   );
 
   return (
-    <div className="min-h-screen bg-zinc-950">
+    <div className={`min-h-screen transition-colors ${theme === 'dark' ? 'bg-zinc-950' : 'bg-zinc-100'}`} data-theme={theme}>
       <Sidebar />
 
       <div className="ml-64">
@@ -940,6 +1004,64 @@ export default function Dashboard() {
                   })
                 )}
               </div>
+
+              {/* PIE CHART - Distribución visual */}
+              {categoryStats.length > 0 && (
+                <div className="bg-zinc-900 rounded-xl border border-zinc-800 p-6">
+                  <div className="flex items-center justify-between mb-6">
+                    <div>
+                      <h2 className="text-lg font-bold text-white tracking-tight">Distribución por Categoría</h2>
+                      <p className="text-xs text-zinc-500 mt-0.5">Vista circular · {monthLabel}</p>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-center">
+                    {/* Pie Chart */}
+                    <ResponsiveContainer width="100%" height={400}>
+                      <PieChart>
+                        <Pie
+                          data={categoryStats.map(c => ({ name: c.cat, value: c.total }))}
+                          cx="50%"
+                          cy="50%"
+                          labelLine={false}
+                          outerRadius={130}
+                          innerRadius={60}
+                          fill="#10b981"
+                          dataKey="value"
+                          paddingAngle={2}
+                        >
+                          {categoryStats.map((_, index) => (
+                            <Cell key={`cell-${index}`} fill={['#10b981', '#3b82f6', '#8b5cf6', '#f43f5e', '#f97316', '#06b6d4', '#ec4899', '#f59e0b', '#14b8a6', '#6366f1', '#84cc16'][index % 11]} />
+                          ))}
+                        </Pie>
+                        <Tooltip contentStyle={{ backgroundColor: '#18181b', border: '1px solid #27272a', borderRadius: '8px', color: '#fff' }} formatter={(value: any) => typeof value === 'number' ? `${value.toFixed(2)}€` : value} />
+                      </PieChart>
+                    </ResponsiveContainer>
+
+                    {/* Legend */}
+                    <div className="space-y-2 max-h-[400px] overflow-y-auto pr-2">
+                      {categoryStats.map((c, idx) => {
+                        const colors = ['#10b981', '#3b82f6', '#8b5cf6', '#f43f5e', '#f97316', '#06b6d4', '#ec4899', '#f59e0b', '#14b8a6', '#6366f1', '#84cc16'];
+                        const percentage = totalGastos > 0 ? (c.total / totalGastos) * 100 : 0;
+                        return (
+                          <div key={c.cat} className="flex items-center justify-between bg-zinc-950 border border-zinc-800 rounded-lg p-3 hover:border-zinc-700 transition-all">
+                            <div className="flex items-center gap-3">
+                              <div className="w-4 h-4 rounded" style={{ backgroundColor: colors[idx % 11] }}></div>
+                              <div>
+                                <p className="text-sm font-semibold text-white capitalize">{c.cat}</p>
+                                <p className="text-xs text-zinc-500">{c.count} registros</p>
+                              </div>
+                            </div>
+                            <div className="text-right">
+                              <p className="text-sm font-bold text-white">{c.total.toFixed(2)}€</p>
+                              <p className="text-xs text-zinc-500">{percentage.toFixed(1)}%</p>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           );
         })()}
@@ -1088,14 +1210,24 @@ export default function Dashboard() {
                 <h2 className="text-lg font-bold text-white">Tendencia Mensual</h2>
                 <div className="flex gap-2 bg-zinc-800 p-1 rounded-lg">
                   <button
-                    onClick={() => setTrendRange('ytd')}
+                    onClick={() => setTrendRange('currentMonth')}
                     className={`px-4 py-2 rounded-md font-semibold text-sm transition-all ${
-                      trendRange === 'ytd'
+                      trendRange === 'currentMonth'
                         ? 'bg-gradient-to-r from-emerald-500 to-teal-600 text-white shadow-lg shadow-emerald-500/20'
                         : 'text-zinc-400 hover:text-white'
                     }`}
                   >
-                    Año
+                    Mes
+                  </button>
+                  <button
+                    onClick={() => setTrendRange('30days')}
+                    className={`px-4 py-2 rounded-md font-semibold text-sm transition-all ${
+                      trendRange === '30days'
+                        ? 'bg-gradient-to-r from-emerald-500 to-teal-600 text-white shadow-lg shadow-emerald-500/20'
+                        : 'text-zinc-400 hover:text-white'
+                    }`}
+                  >
+                    30 días
                   </button>
                   <button
                     onClick={() => setTrendRange('90days')}
@@ -1108,14 +1240,14 @@ export default function Dashboard() {
                     90 días
                   </button>
                   <button
-                    onClick={() => setTrendRange('30days')}
+                    onClick={() => setTrendRange('ytd')}
                     className={`px-4 py-2 rounded-md font-semibold text-sm transition-all ${
-                      trendRange === '30days'
+                      trendRange === 'ytd'
                         ? 'bg-gradient-to-r from-emerald-500 to-teal-600 text-white shadow-lg shadow-emerald-500/20'
                         : 'text-zinc-400 hover:text-white'
                     }`}
                   >
-                    30 días
+                    Año
                   </button>
                 </div>
               </div>
