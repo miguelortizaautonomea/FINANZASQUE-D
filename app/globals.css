@@ -24,3 +24,49 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+/* Dark mode color scheme for native form controls (date pickers, selects, etc.) */
+html {
+  color-scheme: dark;
+}
+
+/* Make date input calendar icon white/visible in dark mode */
+input[type="date"]::-webkit-calendar-picker-indicator {
+  filter: invert(1) brightness(0.8);
+  cursor: pointer;
+  opacity: 0.7;
+  transition: opacity 0.2s;
+}
+
+input[type="date"]::-webkit-calendar-picker-indicator:hover {
+  opacity: 1;
+}
+
+/* Make sure date input text is white */
+input[type="date"] {
+  color-scheme: dark;
+}
+
+input[type="date"]::-webkit-datetime-edit {
+  color: #fff;
+}
+
+input[type="date"]::-webkit-datetime-edit-fields-wrapper {
+  color: #fff;
+}
+
+input[type="date"]::-webkit-datetime-edit-text {
+  color: #71717a;
+  padding: 0 2px;
+}
+
+input[type="date"]::-webkit-datetime-edit-month-field,
+input[type="date"]::-webkit-datetime-edit-day-field,
+input[type="date"]::-webkit-datetime-edit-year-field {
+  color: #fff;
+}
+
+/* Custom select arrow for dark mode */
+select {
+  color-scheme: dark;
+}
