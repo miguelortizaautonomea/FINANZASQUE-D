@@ -662,7 +662,7 @@ export default function Dashboard() {
                             <Cell key={`cell-${index}`} fill={['#2563eb', '#16a34a', '#dc2626', '#f59e0b', '#8b5cf6', '#ec4899', '#6366f1', '#0891b2', '#059669', '#d97706', '#7c3aed'][index % 11]} />
                           ))}
                         </Pie>
-                        <Tooltip contentStyle={{ backgroundColor: '#f8fafc', border: 'none', borderRadius: '8px' }} formatter={(value) => `${value.toFixed(2)}€`} />
+                        <Tooltip contentStyle={{ backgroundColor: '#f8fafc', border: 'none', borderRadius: '8px' }} formatter={(value: any) => typeof value === 'number' ? `${value.toFixed(2)}€` : value} />
                       </PieChart>
                     </ResponsiveContainer>
                     <div className="mt-6 grid grid-cols-2 gap-3">
