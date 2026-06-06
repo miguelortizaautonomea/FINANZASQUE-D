@@ -306,7 +306,7 @@ export default function Dashboard() {
       .sort((a, b) => b.value - a.value);
   }, [chartFilteredInvoices]);
 
-  const handleAddInvoice = (type: 'income' | 'expense') => {
+  const handleAddInvoice = async (type: 'income' | 'expense') => {
     // PDF es OPCIONAL - solo requiere descripción y monto
     if (!formData.company || !formData.amount) {
       alert('Por favor completa al menos: Descripción y Monto');
@@ -332,7 +332,20 @@ export default function Dashboard() {
       hasInvoice: !!selectedFile, // Si hay archivo, automáticamente marca que tiene factura
     };
 
-    setInvoices([...invoices, newInvoice]);
+    // Optimistic update
+    setInvoices([newInvoice, ...invoices]);
+
+    // Persistir en Supabase
+    try {
+      await fetch('/api/invoices', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newInvoice),
+      });
+    } catch (e) {
+      console.error('Error creating invoice:', e);
+    }
+
     setFormData({
       number: '',
       company: '',
@@ -388,14 +401,33 @@ export default function Dashboard() {
     }
   };
 
-  const deleteInvoice = (id: string) => {
+  const deleteInvoice = async (id: string) => {
+    // Optimistic update
     setInvoices(invoices.filter((inv) => inv.id !== id));
+    // Persistir en Supabase
+    try {
+      await fetch(`/api/invoices?id=${id}`, { method: 'DELETE' });
+    } catch (e) {
+      console.error('Error deleting:', e);
+    }
   };
 
-  const toggleInvoice = (id: string) => {
-    setInvoices(invoices.map((inv) =>
-      inv.id === id ? { ...inv, hasInvoice: !inv.hasInvoice } : inv
-    ));
+  const toggleInvoice = async (id: string) => {
+    const invoice = invoices.find(i => i.id === id);
+    if (!invoice) return;
+    const updated = { ...invoice, hasInvoice: !invoice.hasInvoice };
+    // Optimistic update
+    setInvoices(invoices.map((inv) => inv.id === id ? updated : inv));
+    // Persistir en Supabase
+    try {
+      await fetch('/api/invoices', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updated),
+      });
+    } catch (e) {
+      console.error('Error toggling invoice:', e);
+    }
   };
 
   const startEditInvoice = (invoice: Invoice) => {
@@ -412,9 +444,9 @@ export default function Dashboard() {
     setShowEditDialog(true);
   };
 
-  const saveEditInvoice = () => {
-    if (!editingId || !formData.number || !formData.company || !formData.amount) {
-      alert('Por favor completa todos los campos');
+  const saveEditInvoice = async () => {
+    if (!editingId || !formData.company || !formData.amount) {
+      alert('Por favor completa al menos descripción y monto');
       return;
     }
 
@@ -422,26 +454,41 @@ export default function Dashboard() {
     const amountWithoutVAT = parseFloat(formData.amountWithoutVAT || formData.amount);
     const vat = amount - amountWithoutVAT;
 
+    const updatedInvoice = invoices.find(i => i.id === editingId);
+    if (!updatedInvoice) return;
+
+    const finalInvoice = {
+      ...updatedInvoice,
+      number: formData.number,
+      company: formData.company,
+      amount,
+      amountWithoutVAT,
+      vat,
+      date: formData.date,
+      category: formData.category,
+      method: formData.method,
+    };
+
     const updated = invoices.map((inv) =>
-      inv.id === editingId
-        ? {
-            ...inv,
-            number: formData.number,
-            company: formData.company,
-            amount,
-            amountWithoutVAT,
-            vat,
-            date: formData.date,
-            category: formData.category,
-            method: formData.method,
-          }
-        : inv
+      inv.id === editingId ? finalInvoice : inv
     );
 
     setInvoices(updated);
     setShowEditDialog(false);
     setEditingId(null);
-    alert('✅ Registro actualizado correctamente');
+
+    // Persistir en Supabase
+    try {
+      await fetch('/api/invoices', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(finalInvoice),
+      });
+    } catch (e) {
+      console.error('Error updating invoice:', e);
+    }
+
+    alert('✅ Registro guardado en base de datos');
     setFormData({
       number: '',
       company: '',

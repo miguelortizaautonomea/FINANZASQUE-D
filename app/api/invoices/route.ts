@@ -1,129 +1,125 @@
-import { NextResponse } from 'next/server';
-import { readFileSync } from 'fs';
-import { join } from 'path';
+import { NextResponse, NextRequest } from 'next/server';
+import { supabase } from '@/lib/supabase';
 
-function parseCSVLine(line: string): string[] {
-  const values: string[] = [];
-  let current = '';
-  let inQuotes = false;
-
-  for (let i = 0; i < line.length; i++) {
-    const char = line[i];
-    const nextChar = line[i + 1];
-
-    if (char === '"') {
-      if (inQuotes && nextChar === '"') {
-        current += '"';
-        i++;
-      } else {
-        inQuotes = !inQuotes;
-      }
-    } else if (char === ',' && !inQuotes) {
-      values.push(current);
-      current = '';
-    } else {
-      current += char;
-    }
-  }
-
-  values.push(current);
-  return values;
+// Mapear de DB a frontend
+function mapFromDB(row: any) {
+  return {
+    id: row.id,
+    type: row.type,
+    category: row.category,
+    number: row.number,
+    company: row.company,
+    amount: parseFloat(row.amount),
+    amountWithoutVAT: parseFloat(row.amount_without_vat),
+    vat: parseFloat(row.vat),
+    date: row.date,
+    fileName: row.file_name,
+    method: row.method,
+    hasInvoice: row.has_invoice,
+  };
 }
 
-function parseAmount(amount: string): number {
-  if (!amount) return 0;
-  let cleaned = amount.replace(/[€\s]/g, '');
-  cleaned = cleaned.replace(',', '.');
-  const num = parseFloat(cleaned);
-  return isNaN(num) ? 0 : num;
+// Mapear de frontend a DB
+function mapToDB(invoice: any) {
+  return {
+    id: invoice.id,
+    type: invoice.type,
+    category: invoice.category,
+    number: invoice.number,
+    company: invoice.company,
+    amount: invoice.amount,
+    amount_without_vat: invoice.amountWithoutVAT,
+    vat: invoice.vat,
+    date: invoice.date,
+    file_name: invoice.fileName,
+    method: invoice.method,
+    has_invoice: invoice.hasInvoice || false,
+  };
 }
 
-function parseDateDDMMYYYY(dateStr: string): string | null {
-  const parts = dateStr.split('/');
-  if (parts.length !== 3) return null;
-
-  let day = parseInt(parts[0], 10);
-  let month = parseInt(parts[1], 10);
-  let year = parseInt(parts[2], 10);
-
-  if (isNaN(day) || isNaN(month) || isNaN(year)) return null;
-
-  if (year < 100) {
-    year = year < 70 ? 2000 + year : 1900 + year;
-  }
-
-  if (day < 1 || day > 31 || month < 1 || month > 12) return null;
-
-  // Create date at midnight UTC to avoid timezone issues
-  const date = new Date(Date.UTC(year, month - 1, day));
-
-  // Validate the date
-  if (date.getUTCDate() !== day || date.getUTCMonth() !== month - 1 || date.getUTCFullYear() !== year) {
-    return null;
-  }
-
-  // Return ISO date string (YYYY-MM-DD)
-  return date.toISOString().split('T')[0];
-}
-
+// GET - Obtener todas las facturas
 export async function GET() {
   try {
-    const filePath = join(process.cwd(), 'public', 'combined.csv');
-    const csvText = readFileSync(filePath, 'utf-8');
+    const { data, error } = await supabase
+      .from('invoices')
+      .select('*')
+      .order('date', { ascending: false });
 
-    const lines = csvText.split('\n').filter(line => line.trim());
-    const invoices: any[] = [];
+    if (error) throw error;
 
-    for (let i = 1; i < lines.length; i++) {
-      const line = lines[i];
+    const invoices = (data || []).map(mapFromDB);
+    return NextResponse.json({ invoices });
+  } catch (error: any) {
+    console.error('Error fetching invoices:', error);
+    return NextResponse.json({ invoices: [], error: error.message }, { status: 500 });
+  }
+}
 
-      if (!line.trim() || line.includes('ENERO') || line.includes('FEBRERO') ||
-          line.includes('MARZO') || line.includes('Abril') || line.includes('Mayo') ||
-          line.includes('JUNIO') || line.includes('JULIO') || line.includes('AGOSTO') ||
-          line.includes('SEPTIEMBRE') || line.includes('OCTUBRE') || line.includes('NOVIEMBRE') ||
-          line.includes('DICIEMBRE') || line.startsWith('-,-') || line === ',,,,,,,,,') {
-        continue;
-      }
+// POST - Crear nueva factura
+export async function POST(req: NextRequest) {
+  try {
+    const body = await req.json();
+    const newInvoice = mapToDB(body);
 
-      const values = parseCSVLine(line);
-      if (values.length < 5) continue;
+    const { data, error } = await supabase
+      .from('invoices')
+      .insert([newInvoice])
+      .select()
+      .single();
 
-      const fecha = values[0]?.trim();
-      const descripcion = values[1]?.trim();
-      const categoria = values[2]?.trim();
-      const tipo = values[3]?.trim();
-      const cantidad = values[4]?.trim();
-      const metodo = values[5]?.trim();
+    if (error) throw error;
 
-      if (!fecha || !tipo || !cantidad) continue;
+    return NextResponse.json({ invoice: mapFromDB(data) });
+  } catch (error: any) {
+    console.error('Error creating invoice:', error);
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+}
 
-      const isIncome = tipo.toLowerCase().includes('ingreso');
-      const isExpense = tipo.toLowerCase().includes('gasto');
-      if (!isIncome && !isExpense) continue;
+// PUT - Actualizar factura existente
+export async function PUT(req: NextRequest) {
+  try {
+    const body = await req.json();
+    const { id, ...updates } = body;
+    const dbUpdates = mapToDB({ id, ...updates });
+    delete (dbUpdates as any).id;
 
-      const amount = parseAmount(cantidad);
-      if (amount === 0) continue;
+    const { data, error } = await supabase
+      .from('invoices')
+      .update(dbUpdates)
+      .eq('id', id)
+      .select()
+      .single();
 
-      const formattedDate = parseDateDDMMYYYY(fecha);
-      if (!formattedDate) continue;
+    if (error) throw error;
 
-      invoices.push({
-        id: `csv_${i}_${Date.now()}`,
-        type: isIncome ? 'income' : 'expense',
-        category: categoria || (isIncome ? 'Ingreso' : 'Otros'),
-        number: descripcion || `${categoria}-${i}`,
-        company: descripcion || 'Sin empresa',
-        amount,
-        amountWithoutVAT: amount,
-        vat: 0,
-        date: formattedDate,
-        fileName: `csv_import.csv`,
-        method: metodo || 'Otro',
-      });
+    return NextResponse.json({ invoice: mapFromDB(data) });
+  } catch (error: any) {
+    console.error('Error updating invoice:', error);
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+}
+
+// DELETE - Eliminar factura
+export async function DELETE(req: NextRequest) {
+  try {
+    const { searchParams } = new URL(req.url);
+    const id = searchParams.get('id');
+
+    if (!id) {
+      return NextResponse.json({ error: 'ID requerido' }, { status: 400 });
     }
 
-    return NextResponse.json({ invoices });
-  } catch (error) {
-    return NextResponse.json({ invoices: [], error: 'Failed to load invoices' }, { status: 500 });
+    const { error } = await supabase
+      .from('invoices')
+      .delete()
+      .eq('id', id);
+
+    if (error) throw error;
+
+    return NextResponse.json({ success: true });
+  } catch (error: any) {
+    console.error('Error deleting invoice:', error);
+    return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
