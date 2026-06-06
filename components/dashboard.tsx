@@ -14,6 +14,17 @@ import {
   FileUp,
   MoreVertical,
   ChevronDown,
+  LayoutDashboard,
+  Receipt,
+  Calculator,
+  Tag,
+  Settings,
+  Wallet,
+  PiggyBank,
+  Percent,
+  FileText,
+  CheckCircle,
+  AlertCircle,
 } from 'lucide-react';
 import {
   LineChart,
@@ -49,7 +60,10 @@ interface Invoice {
 const CATEGORIES = ['comidas', 'caballo', 'deporte', 'work', 'ocio', 'caprichos', 'viajes', 'campo', 'regalos', 'coche', 'desayuno'];
 const METHODS = ['Tarjeta', 'Efectivo', 'Transferencia', 'Bizum', 'PayPal', 'Otro'];
 
+type ViewType = 'dashboard' | 'transactions' | 'accounting' | 'categories' | 'settings';
+
 export default function Dashboard() {
+  const [activeView, setActiveView] = useState<ViewType>('dashboard');
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [loading, setLoading] = useState(true);
   const [showIncomeDialog, setShowIncomeDialog] = useState(false);
@@ -400,10 +414,366 @@ export default function Dashboard() {
     setSortBy('date-desc');
   };
 
+  // Cálculos de Contabilidad - Por Trimestre
+  const accountingData = useMemo(() => {
+    const currentYear = new Date().getFullYear();
+    const yearInvoices = invoices.filter(inv => new Date(inv.date).getFullYear() === currentYear);
+
+    const calculateQuarter = (q: number) => {
+      const startMonth = (q - 1) * 3;
+      const endMonth = startMonth + 3;
+      const quarterInvoices = yearInvoices.filter(inv => {
+        const month = new Date(inv.date).getMonth();
+        return month >= startMonth && month < endMonth;
+      });
+
+      const income = quarterInvoices.filter(i => i.type === 'income').reduce((sum, i) => sum + i.amount, 0);
+      const expenses = quarterInvoices.filter(i => i.type === 'expense').reduce((sum, i) => sum + i.amount, 0);
+      const benefit = income - expenses;
+
+      // Cálculos fiscales españoles (autónomos)
+      const ivaRepercutido = income * 0.21; // IVA cobrado
+      const ivaSoportado = expenses * 0.21; // IVA pagado deducible
+      const ivaAPagar = Math.max(0, ivaRepercutido - ivaSoportado); // Modelo 303
+      const irpfRetencion = Math.max(0, benefit * 0.20); // Modelo 130 (20% pago a cuenta)
+      const totalImpuestos = ivaAPagar + irpfRetencion;
+      const beneficioNeto = benefit - totalImpuestos;
+
+      return {
+        quarter: q,
+        income,
+        expenses,
+        benefit,
+        ivaRepercutido,
+        ivaSoportado,
+        ivaAPagar,
+        irpfRetencion,
+        totalImpuestos,
+        beneficioNeto,
+        count: quarterInvoices.length,
+      };
+    };
+
+    const quarters = [1, 2, 3, 4].map(q => calculateQuarter(q));
+
+    // Cálculo anual
+    const yearIncome = yearInvoices.filter(i => i.type === 'income').reduce((sum, i) => sum + i.amount, 0);
+    const yearExpenses = yearInvoices.filter(i => i.type === 'expense').reduce((sum, i) => sum + i.amount, 0);
+    const yearBenefit = yearIncome - yearExpenses;
+    const yearIVAPagar = quarters.reduce((sum, q) => sum + q.ivaAPagar, 0);
+    const yearIRPF = quarters.reduce((sum, q) => sum + q.irpfRetencion, 0);
+    const yearTotalImpuestos = yearIVAPagar + yearIRPF;
+    const yearBeneficioNeto = yearBenefit - yearTotalImpuestos;
+
+    // Trimestre actual
+    const currentMonth = new Date().getMonth();
+    const currentQuarter = Math.floor(currentMonth / 3) + 1;
+
+    return {
+      quarters,
+      year: {
+        income: yearIncome,
+        expenses: yearExpenses,
+        benefit: yearBenefit,
+        ivaAPagar: yearIVAPagar,
+        irpf: yearIRPF,
+        totalImpuestos: yearTotalImpuestos,
+        beneficioNeto: yearBeneficioNeto,
+      },
+      currentQuarter,
+    };
+  }, [invoices]);
+
+  // Sidebar Component
+  const Sidebar = () => (
+    <aside className="bg-slate-900 text-white w-64 min-h-screen flex flex-col fixed left-0 top-0 z-50">
+      <div className="p-6 border-b border-slate-800">
+        <div className="flex items-center gap-3">
+          <div className="bg-gradient-to-br from-blue-500 to-blue-700 p-2 rounded-lg">
+            <DollarSign size={24} />
+          </div>
+          <div>
+            <h1 className="text-xl font-bold">FinanzApp</h1>
+            <p className="text-xs text-slate-400">Pro</p>
+          </div>
+        </div>
+      </div>
+
+      <nav className="flex-1 p-4 space-y-1">
+        <button
+          onClick={() => setActiveView('dashboard')}
+          className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-all ${
+            activeView === 'dashboard'
+              ? 'bg-blue-600 text-white shadow-lg'
+              : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+          }`}
+        >
+          <LayoutDashboard size={20} />
+          <span className="font-medium">Dashboard</span>
+        </button>
+
+        <button
+          onClick={() => setActiveView('transactions')}
+          className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-all ${
+            activeView === 'transactions'
+              ? 'bg-blue-600 text-white shadow-lg'
+              : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+          }`}
+        >
+          <Receipt size={20} />
+          <span className="font-medium">Transacciones</span>
+        </button>
+
+        <button
+          onClick={() => setActiveView('accounting')}
+          className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-all ${
+            activeView === 'accounting'
+              ? 'bg-blue-600 text-white shadow-lg'
+              : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+          }`}
+        >
+          <Calculator size={20} />
+          <span className="font-medium">Contabilidad</span>
+        </button>
+
+        <button
+          onClick={() => setActiveView('categories')}
+          className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-all ${
+            activeView === 'categories'
+              ? 'bg-blue-600 text-white shadow-lg'
+              : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+          }`}
+        >
+          <Tag size={20} />
+          <span className="font-medium">Categorías</span>
+        </button>
+
+        <button
+          onClick={() => setActiveView('settings')}
+          className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-all ${
+            activeView === 'settings'
+              ? 'bg-blue-600 text-white shadow-lg'
+              : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+          }`}
+        >
+          <Settings size={20} />
+          <span className="font-medium">Configuración</span>
+        </button>
+      </nav>
+
+      <div className="p-4 border-t border-slate-800">
+        <div className="bg-blue-600/20 border border-blue-500/30 rounded-lg p-3">
+          <p className="text-xs text-slate-300">Total Sistema</p>
+          <p className="text-2xl font-bold text-white">{invoices.length}</p>
+          <p className="text-xs text-slate-400">registros</p>
+        </div>
+      </div>
+    </aside>
+  );
+
+  // Vista de Contabilidad
+  const AccountingView = () => (
+    <div className="space-y-8">
+      {/* Header de Contabilidad */}
+      <div className="bg-gradient-to-r from-blue-600 to-blue-800 text-white rounded-xl p-8 shadow-lg">
+        <div className="flex items-center gap-4">
+          <div className="bg-white/20 p-3 rounded-lg">
+            <Calculator size={32} />
+          </div>
+          <div>
+            <h1 className="text-3xl font-bold">Contabilidad</h1>
+            <p className="text-blue-100">Resumen fiscal y trimestral - Año {new Date().getFullYear()}</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Resumen Anual */}
+      <div>
+        <h2 className="text-xl font-bold text-black mb-4">📊 Resumen Anual</h2>
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div className="bg-white rounded-lg border-l-4 border-green-500 p-6 shadow-sm">
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-sm text-gray-600 font-semibold">INGRESOS</p>
+              <TrendingUp className="text-green-500" size={20} />
+            </div>
+            <p className="text-3xl font-bold text-green-600">{accountingData.year.income.toFixed(2)}€</p>
+          </div>
+
+          <div className="bg-white rounded-lg border-l-4 border-red-500 p-6 shadow-sm">
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-sm text-gray-600 font-semibold">GASTOS</p>
+              <TrendingDown className="text-red-500" size={20} />
+            </div>
+            <p className="text-3xl font-bold text-red-600">{accountingData.year.expenses.toFixed(2)}€</p>
+          </div>
+
+          <div className={`bg-white rounded-lg border-l-4 ${accountingData.year.benefit >= 0 ? 'border-blue-500' : 'border-orange-500'} p-6 shadow-sm`}>
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-sm text-gray-600 font-semibold">BENEFICIO BRUTO</p>
+              <PiggyBank className={accountingData.year.benefit >= 0 ? 'text-blue-500' : 'text-orange-500'} size={20} />
+            </div>
+            <p className={`text-3xl font-bold ${accountingData.year.benefit >= 0 ? 'text-blue-600' : 'text-orange-600'}`}>
+              {accountingData.year.benefit.toFixed(2)}€
+            </p>
+          </div>
+
+          <div className="bg-white rounded-lg border-l-4 border-purple-500 p-6 shadow-sm">
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-sm text-gray-600 font-semibold">BENEFICIO NETO</p>
+              <Wallet className="text-purple-500" size={20} />
+            </div>
+            <p className="text-3xl font-bold text-purple-600">{accountingData.year.beneficioNeto.toFixed(2)}€</p>
+            <p className="text-xs text-gray-500 mt-1">Tras impuestos</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Impuestos Anuales */}
+      <div>
+        <h2 className="text-xl font-bold text-black mb-4">💰 Impuestos Estimados (Anual)</h2>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="bg-orange-50 border border-orange-200 rounded-lg p-6">
+            <div className="flex items-center gap-3 mb-3">
+              <div className="bg-orange-500 text-white p-2 rounded-lg">
+                <Percent size={20} />
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-gray-700">IVA A PAGAR</p>
+                <p className="text-xs text-gray-500">Modelo 303 (21%)</p>
+              </div>
+            </div>
+            <p className="text-2xl font-bold text-orange-600">{accountingData.year.ivaAPagar.toFixed(2)}€</p>
+          </div>
+
+          <div className="bg-red-50 border border-red-200 rounded-lg p-6">
+            <div className="flex items-center gap-3 mb-3">
+              <div className="bg-red-500 text-white p-2 rounded-lg">
+                <FileText size={20} />
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-gray-700">IRPF (Pagos a Cuenta)</p>
+                <p className="text-xs text-gray-500">Modelo 130 (20%)</p>
+              </div>
+            </div>
+            <p className="text-2xl font-bold text-red-600">{accountingData.year.irpf.toFixed(2)}€</p>
+          </div>
+
+          <div className="bg-slate-100 border border-slate-300 rounded-lg p-6">
+            <div className="flex items-center gap-3 mb-3">
+              <div className="bg-slate-700 text-white p-2 rounded-lg">
+                <AlertCircle size={20} />
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-gray-700">TOTAL IMPUESTOS</p>
+                <p className="text-xs text-gray-500">IVA + IRPF</p>
+              </div>
+            </div>
+            <p className="text-2xl font-bold text-slate-800">{accountingData.year.totalImpuestos.toFixed(2)}€</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Cálculos por Trimestre */}
+      <div>
+        <h2 className="text-xl font-bold text-black mb-4">📅 Desglose por Trimestres</h2>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          {accountingData.quarters.map((q) => {
+            const isCurrentQuarter = q.quarter === accountingData.currentQuarter;
+            const quarterLabel = ['Q1 (Ene-Mar)', 'Q2 (Abr-Jun)', 'Q3 (Jul-Sep)', 'Q4 (Oct-Dic)'][q.quarter - 1];
+
+            return (
+              <div
+                key={q.quarter}
+                className={`bg-white rounded-lg border-2 p-5 shadow-sm ${
+                  isCurrentQuarter ? 'border-blue-500 ring-2 ring-blue-100' : 'border-slate-200'
+                }`}
+              >
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="font-bold text-black">{quarterLabel}</h3>
+                  {isCurrentQuarter && (
+                    <span className="bg-blue-600 text-white text-xs px-2 py-1 rounded-full font-semibold">
+                      ACTUAL
+                    </span>
+                  )}
+                </div>
+
+                <div className="space-y-3">
+                  <div className="flex justify-between items-center pb-2 border-b border-slate-100">
+                    <span className="text-xs text-gray-600">Ingresos</span>
+                    <span className="text-sm font-bold text-green-600">+{q.income.toFixed(2)}€</span>
+                  </div>
+                  <div className="flex justify-between items-center pb-2 border-b border-slate-100">
+                    <span className="text-xs text-gray-600">Gastos</span>
+                    <span className="text-sm font-bold text-red-600">-{q.expenses.toFixed(2)}€</span>
+                  </div>
+                  <div className="flex justify-between items-center pb-2 border-b border-slate-100">
+                    <span className="text-xs text-gray-600 font-semibold">Beneficio</span>
+                    <span className={`text-sm font-bold ${q.benefit >= 0 ? 'text-blue-600' : 'text-orange-600'}`}>
+                      {q.benefit.toFixed(2)}€
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center pb-2 border-b border-slate-100">
+                    <span className="text-xs text-gray-600">IVA (303)</span>
+                    <span className="text-sm font-bold text-orange-600">{q.ivaAPagar.toFixed(2)}€</span>
+                  </div>
+                  <div className="flex justify-between items-center pb-2 border-b border-slate-100">
+                    <span className="text-xs text-gray-600">IRPF (130)</span>
+                    <span className="text-sm font-bold text-red-600">{q.irpfRetencion.toFixed(2)}€</span>
+                  </div>
+                  <div className="bg-slate-50 -mx-5 -mb-5 px-5 py-3 mt-3">
+                    <div className="flex justify-between items-center">
+                      <span className="text-xs font-semibold text-gray-700">A PAGAR</span>
+                      <span className="text-base font-bold text-slate-900">{q.totalImpuestos.toFixed(2)}€</span>
+                    </div>
+                    <p className="text-xs text-gray-500 mt-1">{q.count} transacciones</p>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Calendario Fiscal */}
+      <div className="bg-blue-50 border border-blue-200 rounded-lg p-6">
+        <h2 className="text-xl font-bold text-black mb-4 flex items-center gap-2">
+          <Calendar className="text-blue-600" size={24} />
+          📌 Calendario Fiscal Trimestral
+        </h2>
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+          <div className="bg-white rounded-lg p-4">
+            <p className="text-xs text-gray-600 font-semibold mb-1">Q1 - Plazo</p>
+            <p className="text-sm font-bold text-black">1 - 20 Abril</p>
+            <p className="text-xs text-gray-500 mt-1">Modelos 303 + 130</p>
+          </div>
+          <div className="bg-white rounded-lg p-4">
+            <p className="text-xs text-gray-600 font-semibold mb-1">Q2 - Plazo</p>
+            <p className="text-sm font-bold text-black">1 - 20 Julio</p>
+            <p className="text-xs text-gray-500 mt-1">Modelos 303 + 130</p>
+          </div>
+          <div className="bg-white rounded-lg p-4">
+            <p className="text-xs text-gray-600 font-semibold mb-1">Q3 - Plazo</p>
+            <p className="text-sm font-bold text-black">1 - 20 Octubre</p>
+            <p className="text-xs text-gray-500 mt-1">Modelos 303 + 130</p>
+          </div>
+          <div className="bg-white rounded-lg p-4">
+            <p className="text-xs text-gray-600 font-semibold mb-1">Q4 - Plazo</p>
+            <p className="text-sm font-bold text-black">1 - 30 Enero</p>
+            <p className="text-xs text-gray-500 mt-1">Modelos 303 + 130</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+
   return (
     <div className="min-h-screen bg-slate-50">
-      {/* Header */}
-      <div className="bg-white border-b border-slate-200 sticky top-0 z-40 shadow-sm">
+      <Sidebar />
+
+      <div className="ml-64">
+        {/* Header */}
+        {activeView === 'dashboard' && (
+        <div className="bg-white border-b border-slate-200 sticky top-0 z-40 shadow-sm">
         <div className="max-w-7xl mx-auto px-6 py-6">
           <div className="flex justify-between items-center">
             <div className="flex items-center gap-3">
@@ -441,6 +811,7 @@ export default function Dashboard() {
           </div>
         </div>
       </div>
+      )}
 
       <div className="max-w-7xl mx-auto px-6 py-8">
         {loading && (
@@ -448,6 +819,58 @@ export default function Dashboard() {
             <p className="text-blue-700 font-semibold">⏳ Cargando tus datos...</p>
           </div>
         )}
+
+        {/* CONTENIDO PRINCIPAL */}
+        {activeView === 'accounting' && <AccountingView />}
+
+        {activeView === 'categories' && (
+          <div className="bg-white rounded-lg border border-slate-200 p-8">
+            <h1 className="text-2xl font-bold text-black mb-4 flex items-center gap-2">
+              <Tag className="text-blue-600" /> Categorías
+            </h1>
+            <p className="text-gray-600 mb-6">Resumen de tus categorías de gasto</p>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              {CATEGORIES.map((cat) => {
+                const total = invoices.filter(i => i.category === cat).reduce((sum, i) => sum + i.amount, 0);
+                const count = invoices.filter(i => i.category === cat).length;
+                return (
+                  <div key={cat} className="bg-slate-50 border border-slate-200 rounded-lg p-4">
+                    <p className="text-xs text-gray-500 uppercase font-semibold">{cat}</p>
+                    <p className="text-xl font-bold text-black mt-1">{total.toFixed(2)}€</p>
+                    <p className="text-xs text-gray-500 mt-1">{count} registros</p>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {activeView === 'settings' && (
+          <div className="bg-white rounded-lg border border-slate-200 p-8">
+            <h1 className="text-2xl font-bold text-black mb-4 flex items-center gap-2">
+              <Settings className="text-blue-600" /> Configuración
+            </h1>
+            <p className="text-gray-600">Próximamente más opciones de configuración</p>
+            <div className="mt-6 grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                <p className="text-sm text-gray-600">Total Registros</p>
+                <p className="text-2xl font-bold text-blue-600">{invoices.length}</p>
+              </div>
+              <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                <p className="text-sm text-gray-600">Total Ingresos</p>
+                <p className="text-2xl font-bold text-green-600">{invoices.filter(i => i.type === 'income').length}</p>
+              </div>
+              <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+                <p className="text-sm text-gray-600">Total Gastos</p>
+                <p className="text-2xl font-bold text-red-600">{invoices.filter(i => i.type === 'expense').length}</p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {(activeView === 'dashboard' || activeView === 'transactions') && (
+        <>
+
 
         {/* Filters for Charts Section */}
         <div className="bg-white rounded-lg border border-slate-200 p-4 mb-6">
@@ -888,6 +1311,9 @@ export default function Dashboard() {
             </div>
           )}
         </div>
+        </>
+        )}
+      </div>
       </div>
 
       {/* Income Dialog */}
