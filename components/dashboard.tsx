@@ -123,6 +123,8 @@ export default function Dashboard() {
   const csvInputRef = useRef<HTMLInputElement>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [importMessage, setImportMessage] = useState<string>('');
+  const [analyzingPDF, setAnalyzingPDF] = useState(false);
+  const [pdfAnalysisError, setPdfAnalysisError] = useState<string>('');
   const [formData, setFormData] = useState({
     number: '',
     company: '',
@@ -133,6 +135,50 @@ export default function Dashboard() {
     method: METHODS[0],
     ivaPercent: '21', // % de IVA (21, 10, 4, 0)
   });
+
+  // Función para analizar un PDF y autorrellenar el formulario
+  const analyzePDF = async (file: File, type: 'income' | 'expense') => {
+    setAnalyzingPDF(true);
+    setPdfAnalysisError('');
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      fd.append('type', type);
+
+      const response = await fetch('/api/analyze-pdf', {
+        method: 'POST',
+        body: fd,
+      });
+
+      const result = await response.json();
+
+      if (!response.ok || result.error) {
+        throw new Error(result.error || 'Error al analizar el PDF');
+      }
+
+      const data = result.data;
+
+      // Auto-rellenar el formulario
+      setFormData((prev) => ({
+        ...prev,
+        company: data.company || prev.company,
+        number: data.company || prev.number,
+        amount: data.amount?.toString() || prev.amount,
+        amountWithoutVAT: data.amountWithoutVAT?.toString() || prev.amountWithoutVAT,
+        ivaPercent: data.ivaPercent?.toString() || '21',
+        date: data.date || prev.date,
+        category: type === 'expense' ? (data.category || prev.category) : prev.category,
+        method: data.method || prev.method,
+      }));
+
+      // Activar el toggle "Tiene factura"
+      setSelectedFile(file);
+    } catch (error: any) {
+      setPdfAnalysisError(error.message || 'No se pudo analizar el PDF');
+    } finally {
+      setAnalyzingPDF(false);
+    }
+  };
 
   // Función para refrescar/cargar datos
   const loadInvoices = async () => {
@@ -2010,6 +2056,45 @@ export default function Dashboard() {
               </button>
             </div>
             <div className="space-y-4">
+              {/* Dropzone PDF - Auto-rellenar con IA */}
+              <div className="bg-gradient-to-br from-emerald-500/5 to-zinc-900 border border-dashed border-emerald-500/30 rounded-xl p-4 hover:border-emerald-500/60 transition-all">
+                <label className="cursor-pointer block">
+                  <div className="flex items-center gap-3">
+                    <div className="bg-gradient-to-br from-emerald-500 to-teal-600 p-2.5 rounded-lg shadow-lg shadow-emerald-500/20 flex-shrink-0">
+                      {analyzingPDF ? (
+                        <RefreshCw size={18} className="text-white animate-spin" />
+                      ) : (
+                        <FileUp size={18} className="text-white" />
+                      )}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold text-white">
+                        {analyzingPDF ? '🤖 Analizando PDF...' : '📄 Subir Factura PDF'}
+                      </p>
+                      <p className="text-[10px] text-zinc-500 truncate">
+                        {analyzingPDF ? 'Extrayendo datos automáticamente...' : 'Se autorrellenarán los campos al subir'}
+                      </p>
+                    </div>
+                    <span className="text-[10px] font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/30 px-2 py-1 rounded">AUTO</span>
+                  </div>
+                  <input
+                    type="file"
+                    accept=".pdf"
+                    disabled={analyzingPDF}
+                    className="hidden"
+                    onChange={(e) => {
+                      const f = e.target.files?.[0];
+                      if (f) analyzePDF(f, 'income');
+                    }}
+                  />
+                </label>
+                {pdfAnalysisError && (
+                  <p className="text-xs text-rose-400 mt-2 flex items-center gap-1">
+                    <AlertCircle size={12} /> {pdfAnalysisError}
+                  </p>
+                )}
+              </div>
+
               <div>
                 <label className="block text-xs font-bold text-zinc-400 mb-2 tracking-wider uppercase">Descripción *</label>
                 <input
@@ -2159,6 +2244,45 @@ export default function Dashboard() {
               </button>
             </div>
             <div className="space-y-4">
+              {/* Dropzone PDF - Auto-rellenar con IA */}
+              <div className="bg-gradient-to-br from-rose-500/5 to-zinc-900 border border-dashed border-rose-500/30 rounded-xl p-4 hover:border-rose-500/60 transition-all">
+                <label className="cursor-pointer block">
+                  <div className="flex items-center gap-3">
+                    <div className="bg-gradient-to-br from-rose-500 to-pink-600 p-2.5 rounded-lg shadow-lg shadow-rose-500/20 flex-shrink-0">
+                      {analyzingPDF ? (
+                        <RefreshCw size={18} className="text-white animate-spin" />
+                      ) : (
+                        <FileUp size={18} className="text-white" />
+                      )}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold text-white">
+                        {analyzingPDF ? '🤖 Analizando PDF...' : '📄 Subir Factura PDF'}
+                      </p>
+                      <p className="text-[10px] text-zinc-500 truncate">
+                        {analyzingPDF ? 'Extrayendo datos automáticamente...' : 'Se autorrellenarán los campos al subir'}
+                      </p>
+                    </div>
+                    <span className="text-[10px] font-bold text-rose-400 bg-rose-500/10 border border-rose-500/30 px-2 py-1 rounded">AUTO</span>
+                  </div>
+                  <input
+                    type="file"
+                    accept=".pdf"
+                    disabled={analyzingPDF}
+                    className="hidden"
+                    onChange={(e) => {
+                      const f = e.target.files?.[0];
+                      if (f) analyzePDF(f, 'expense');
+                    }}
+                  />
+                </label>
+                {pdfAnalysisError && (
+                  <p className="text-xs text-rose-400 mt-2 flex items-center gap-1">
+                    <AlertCircle size={12} /> {pdfAnalysisError}
+                  </p>
+                )}
+              </div>
+
               <div>
                 <label className="block text-xs font-bold text-zinc-400 mb-2 tracking-wider uppercase">Descripción *</label>
                 <input
