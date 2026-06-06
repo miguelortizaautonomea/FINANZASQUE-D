@@ -19,6 +19,7 @@ export interface ParsedInvoice {
   vat: number;
   date: string;
   fileName: string;
+  method: string;
 }
 
 export function parseCSV(csvText: string): ParsedInvoice[] {
@@ -82,6 +83,7 @@ export function parseCSV(csvText: string): ParsedInvoice[] {
       vat: 0,
       date: formattedDate,
       fileName: `csv_import_${formattedDate}.csv`,
+      method: 'Otro',
     };
 
     invoices.push(invoice);
