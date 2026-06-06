@@ -468,6 +468,8 @@ export default function Dashboard() {
       method: invoice.method || METHODS[0],
       ivaPercent,
     });
+    // Pre-cargar el toggle de "Tiene factura"
+    setSelectedFile(invoice.hasInvoice ? new File([], 'manual') : null);
     setShowEditDialog(true);
   };
 
@@ -478,8 +480,16 @@ export default function Dashboard() {
     }
 
     const amount = parseFloat(formData.amount);
-    const amountWithoutVAT = parseFloat(formData.amountWithoutVAT || formData.amount);
-    const vat = amount - amountWithoutVAT;
+    const hasInvoice = !!selectedFile;
+
+    // Si tiene factura → calcular IVA basado en el porcentaje
+    let amountWithoutVAT = amount;
+    let vat = 0;
+    if (hasInvoice) {
+      const ivaPercent = parseFloat(formData.ivaPercent || '21');
+      amountWithoutVAT = amount / (1 + ivaPercent / 100);
+      vat = amount - amountWithoutVAT;
+    }
 
     const updatedInvoice = invoices.find(i => i.id === editingId);
     if (!updatedInvoice) return;
@@ -494,6 +504,7 @@ export default function Dashboard() {
       date: formData.date,
       category: formData.category,
       method: formData.method,
+      hasInvoice,
     };
 
     const updated = invoices.map((inv) =>
@@ -986,10 +997,25 @@ export default function Dashboard() {
           const colorClass = isIncome ? 'emerald' : 'rose';
           const Icon = isIncome ? TrendingUp : TrendingDown;
 
-          // Solo facturas (hasInvoice === true) del tipo correspondiente
+          // Solo facturas (hasInvoice === true) del tipo correspondiente Y a partir de Abril del año actual
+          const minDate = `${new Date().getFullYear()}-04-01`;
           const invoicesList = invoices
-            .filter(i => i.type === invoiceType && i.hasInvoice === true)
+            .filter(i =>
+              i.type === invoiceType &&
+              i.hasInvoice === true &&
+              i.date >= minDate
+            )
             .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+          // Función para abrir el modal con "Tiene factura" pre-activado
+          const openInvoiceDialog = () => {
+            setSelectedFile(new File([], 'manual')); // Activar toggle de factura
+            if (isIncome) {
+              setShowIncomeDialog(true);
+            } else {
+              setShowExpenseDialog(true);
+            }
+          };
 
           const total = invoicesList.reduce((sum, i) => sum + i.amount, 0);
           const ivaTotal = total * 0.21;
@@ -1023,10 +1049,17 @@ export default function Dashboard() {
                         {isIncome ? 'Facturas de Ingresos' : 'Facturas de Gastos'}
                       </h1>
                       <p className="text-zinc-400 text-sm mt-1">
-                        Solo facturas profesionales · <span className={`text-${colorClass}-400 font-semibold`}>{invoicesList.length} facturas</span>
+                        Desde Abril {new Date().getFullYear()} · <span className={`text-${colorClass}-400 font-semibold`}>{invoicesList.length} facturas</span>
                       </p>
                     </div>
                   </div>
+                  <button
+                    onClick={openInvoiceDialog}
+                    className={`bg-gradient-to-r from-${colorClass}-500 to-${colorClass}-600 hover:scale-105 text-white font-semibold py-3 px-5 rounded-xl flex items-center gap-2 transition-all shadow-lg shadow-${colorClass}-500/30`}
+                  >
+                    <Plus size={18} />
+                    <span>Añadir Factura</span>
+                  </button>
                 </div>
               </div>
 
@@ -1081,12 +1114,14 @@ export default function Dashboard() {
                           <th className="text-right py-3 px-6 text-xs font-bold text-zinc-400 tracking-wider uppercase">IVA</th>
                           <th className="text-right py-3 px-6 text-xs font-bold text-zinc-400 tracking-wider uppercase">Total</th>
                           <th className="text-left py-3 px-6 text-xs font-bold text-zinc-400 tracking-wider uppercase">Fecha</th>
+                          <th className="text-center py-3 px-6 text-xs font-bold text-zinc-400 tracking-wider uppercase">Acciones</th>
                         </tr>
                       </thead>
                       <tbody>
                         {invoicesList.map((inv, idx) => {
-                          const base = inv.amount / 1.21;
-                          const iva = inv.amount - base;
+                          // Usar el IVA real si existe, sino calcular al 21%
+                          const base = inv.amountWithoutVAT > 0 ? inv.amountWithoutVAT : inv.amount / 1.21;
+                          const iva = inv.vat > 0 ? inv.vat : inv.amount - base;
                           return (
                             <tr key={inv.id} className={`border-b border-zinc-800/50 hover:bg-zinc-800/30 transition-colors ${idx % 2 === 0 ? 'bg-zinc-900/50' : 'bg-zinc-900/20'}`}>
                               <td className="py-3 px-6">
@@ -1106,6 +1141,24 @@ export default function Dashboard() {
                               <td className="py-3 px-6 text-right text-amber-400 text-sm">{iva.toFixed(2)}€</td>
                               <td className={`py-3 px-6 text-right font-bold text-${colorClass}-400`}>{inv.amount.toFixed(2)}€</td>
                               <td className="py-3 px-6 text-zinc-400 text-sm">{inv.date}</td>
+                              <td className="py-3 px-6 text-center">
+                                <div className="flex items-center justify-center gap-2">
+                                  <button
+                                    onClick={() => startEditInvoice(inv)}
+                                    className="text-blue-500 hover:text-blue-400 hover:bg-blue-500/10 p-2 rounded-lg transition-all"
+                                    title="Editar"
+                                  >
+                                    ✏️
+                                  </button>
+                                  <button
+                                    onClick={() => deleteInvoice(inv.id)}
+                                    className="text-rose-500 hover:text-rose-400 hover:bg-rose-500/10 p-2 rounded-lg transition-all"
+                                    title="Eliminar"
+                                  >
+                                    <Trash2 size={16} />
+                                  </button>
+                                </div>
+                              </td>
                             </tr>
                           );
                         })}
@@ -1116,7 +1169,14 @@ export default function Dashboard() {
                   <div className="flex flex-col items-center justify-center py-16 px-6">
                     <FileText size={48} className="text-zinc-700 mb-4" />
                     <p className="text-zinc-400 text-lg font-semibold mb-2">No hay facturas todavía</p>
-                    <p className="text-zinc-500 text-sm">Marca el toggle "📄 Factura" en Transacciones para que aparezcan aquí</p>
+                    <p className="text-zinc-500 text-sm mb-6">Crea tu primera factura {isIncome ? 'de ingreso' : 'de gasto'} desde abril {new Date().getFullYear()}</p>
+                    <button
+                      onClick={openInvoiceDialog}
+                      className={`bg-gradient-to-r from-${colorClass}-500 to-${colorClass}-600 hover:scale-105 text-white font-semibold py-2.5 px-5 rounded-lg flex items-center gap-2 transition-all shadow-lg shadow-${colorClass}-500/30`}
+                    >
+                      <Plus size={18} />
+                      <span>Añadir Primera Factura</span>
+                    </button>
                   </div>
                 )}
               </div>
@@ -2241,110 +2301,169 @@ export default function Dashboard() {
       )}
 
       {/* Edit Dialog */}
-      {showEditDialog && editingId && (
-        <div className="fixed inset-0 bg-black bg-opacity-30 flex items-center justify-center p-4 z-50 backdrop-blur-sm">
-          <div className="bg-zinc-900 border border-zinc-800 rounded-xl shadow-2xl max-w-md w-full p-8">
+      {showEditDialog && editingId && (() => {
+        const editingInvoice = invoices.find(i => i.id === editingId);
+        const isIncome = editingInvoice?.type === 'income';
+        const ringColor = isIncome ? 'emerald' : 'rose';
+        return (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50 backdrop-blur-sm">
+          <div className={`bg-zinc-900 border border-${ringColor}-500/30 rounded-2xl shadow-2xl shadow-${ringColor}-500/10 max-w-md w-full p-8`}>
             <div className="flex items-center justify-between mb-6">
-              <h2 className="text-2xl font-bold text-white">Editar Registro</h2>
+              <div className="flex items-center gap-3">
+                <div className={`bg-gradient-to-br from-${ringColor}-500 to-${isIncome ? 'teal' : 'pink'}-600 p-2.5 rounded-xl shadow-lg shadow-${ringColor}-500/20`}>
+                  {isIncome ? <TrendingUp size={20} className="text-white" /> : <TrendingDown size={20} className="text-white" />}
+                </div>
+                <div>
+                  <h2 className="text-xl font-bold text-white">Editar {isIncome ? 'Ingreso' : 'Gasto'}</h2>
+                  <p className="text-xs text-zinc-500">Modificar registro</p>
+                </div>
+              </div>
               <button
                 onClick={() => {
                   setShowEditDialog(false);
                   setEditingId(null);
                 }}
-                className="text-zinc-600 hover:text-zinc-400"
+                className="text-zinc-600 hover:text-white p-1 rounded-lg hover:bg-zinc-800 transition-all"
               >
-                <X size={24} />
+                <X size={20} />
               </button>
             </div>
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-semibold text-zinc-300 mb-2">Número de factura</label>
-                <input
-                  type="text"
-                  value={formData.number}
-                  onChange={(e) => setFormData({ ...formData, number: e.target.value })}
-                  className="w-full px-4 py-2 border border-zinc-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 text-white bg-zinc-950"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-semibold text-zinc-300 mb-2">Empresa/Proveedor</label>
+                <label className="block text-xs font-bold text-zinc-400 mb-2 tracking-wider uppercase">Descripción</label>
                 <input
                   type="text"
                   value={formData.company}
-                  onChange={(e) => setFormData({ ...formData, company: e.target.value })}
-                  className="w-full px-4 py-2 border border-zinc-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 text-white bg-zinc-950"
+                  onChange={(e) => setFormData({ ...formData, company: e.target.value, number: e.target.value })}
+                  className={`w-full px-4 py-2.5 border border-zinc-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-${ringColor}-500 text-white bg-zinc-950`}
                 />
               </div>
-              <div>
-                <label className="block text-sm font-semibold text-zinc-300 mb-2">Categoría</label>
-                <select
-                  value={formData.category}
-                  onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-                  className="w-full px-4 py-2 border border-zinc-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 text-white bg-zinc-950"
-                >
-                  {CATEGORIES.map((cat) => (
-                    <option key={cat} value={cat}>
-                      {cat}
-                    </option>
-                  ))}
-                </select>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-zinc-400 mb-2 tracking-wider uppercase">Monto</label>
+                  <div className="relative">
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={formData.amount}
+                      onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
+                      className={`w-full px-4 py-2.5 pr-8 border border-zinc-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-${ringColor}-500 text-white bg-zinc-950`}
+                    />
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 text-sm">€</span>
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-zinc-400 mb-2 tracking-wider uppercase">Fecha</label>
+                  <input
+                    type="date"
+                    value={formData.date}
+                    onChange={(e) => setFormData({ ...formData, date: e.target.value })}
+                    className={`w-full px-4 py-2.5 border border-zinc-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-${ringColor}-500 text-white bg-zinc-950`}
+                  />
+                </div>
               </div>
-              <div>
-                <label className="block text-sm font-semibold text-zinc-300 mb-2">Método de Pago</label>
-                <select
-                  value={formData.method}
-                  onChange={(e) => setFormData({ ...formData, method: e.target.value })}
-                  className="w-full px-4 py-2 border border-zinc-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 text-white bg-zinc-950"
-                >
-                  {METHODS.map((m) => (
-                    <option key={m} value={m}>
-                      {m}
-                    </option>
-                  ))}
-                </select>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-zinc-400 mb-2 tracking-wider uppercase">Categoría</label>
+                  <select
+                    value={formData.category}
+                    onChange={(e) => setFormData({ ...formData, category: e.target.value })}
+                    className={`w-full px-4 py-2.5 border border-zinc-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-${ringColor}-500 text-white bg-zinc-950`}
+                  >
+                    {CATEGORIES.map((cat) => (
+                      <option key={cat} value={cat}>{cat}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-zinc-400 mb-2 tracking-wider uppercase">Método</label>
+                  <select
+                    value={formData.method}
+                    onChange={(e) => setFormData({ ...formData, method: e.target.value })}
+                    className={`w-full px-4 py-2.5 border border-zinc-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-${ringColor}-500 text-white bg-zinc-950`}
+                  >
+                    {METHODS.map((m) => (
+                      <option key={m} value={m}>{m}</option>
+                    ))}
+                  </select>
+                </div>
               </div>
-              <div>
-                <label className="block text-sm font-semibold text-zinc-300 mb-2">Fecha</label>
+
+              {/* Toggle Tiene factura */}
+              <label className={`flex items-center justify-between p-3 bg-zinc-950 border border-zinc-800 rounded-lg cursor-pointer hover:border-${ringColor}-500/30 transition-all`}>
+                <div className="flex items-center gap-3">
+                  <FileText size={16} className={`text-${ringColor}-400`} />
+                  <div>
+                    <p className="text-sm font-semibold text-white">Tiene factura</p>
+                    <p className="text-[10px] text-zinc-500">Incluir en contabilidad fiscal</p>
+                  </div>
+                </div>
                 <input
-                  type="date"
-                  value={formData.date}
-                  onChange={(e) => setFormData({ ...formData, date: e.target.value })}
-                  className="w-full px-4 py-2 border border-zinc-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 text-white bg-zinc-950"
+                  type="checkbox"
+                  checked={selectedFile !== null}
+                  onChange={(e) => setSelectedFile(e.target.checked ? new File([], 'manual') : null)}
+                  className="sr-only peer"
                 />
-              </div>
-              <div>
-                <label className="block text-sm font-semibold text-zinc-300 mb-2">Monto (Con IVA)</label>
-                <input
-                  type="number"
-                  step="0.01"
-                  value={formData.amount}
-                  onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
-                  className="w-full px-4 py-2 border border-zinc-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 text-white bg-zinc-950"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-semibold text-zinc-300 mb-2">Monto (Sin IVA)</label>
-                <input
-                  type="number"
-                  step="0.01"
-                  value={formData.amountWithoutVAT}
-                  onChange={(e) => setFormData({ ...formData, amountWithoutVAT: e.target.value })}
-                  className="w-full px-4 py-2 border border-zinc-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 text-white bg-zinc-950"
-                />
-              </div>
-              <div className="flex gap-3 pt-4">
+                <div className={`w-10 h-5 rounded-full transition-all relative ${selectedFile ? `bg-${ringColor}-500` : 'bg-zinc-700'}`}>
+                  <div className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white transition-all ${selectedFile ? 'translate-x-5' : ''}`}></div>
+                </div>
+              </label>
+
+              {/* IVA selector - solo si tiene factura */}
+              {selectedFile && (
+                <div className="bg-gradient-to-br from-amber-500/5 to-zinc-900 border border-amber-500/20 rounded-lg p-4 space-y-3">
+                  <div className="flex items-center gap-2 mb-1">
+                    <Percent size={14} className="text-amber-400" />
+                    <p className="text-xs font-bold text-amber-400 tracking-wider uppercase">{isIncome ? 'IVA Repercutido' : 'IVA Soportado'}</p>
+                  </div>
+                  <select
+                    value={formData.ivaPercent}
+                    onChange={(e) => setFormData({ ...formData, ivaPercent: e.target.value })}
+                    className="w-full px-3 py-2 border border-zinc-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500 text-white bg-zinc-950 text-sm"
+                  >
+                    <option value="21">21% (General)</option>
+                    <option value="10">10% (Reducido)</option>
+                    <option value="4">4% (Superreducido)</option>
+                    <option value="0">0% (Exento)</option>
+                  </select>
+                  {formData.amount && (
+                    <div className="grid grid-cols-3 gap-2 text-center pt-2 border-t border-zinc-800">
+                      <div>
+                        <p className="text-[10px] text-zinc-500 uppercase tracking-wider">Base</p>
+                        <p className="text-sm font-bold text-white">
+                          {(parseFloat(formData.amount) / (1 + parseFloat(formData.ivaPercent) / 100)).toFixed(2)}€
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] text-zinc-500 uppercase tracking-wider">IVA</p>
+                        <p className="text-sm font-bold text-amber-400">
+                          {(parseFloat(formData.amount) - parseFloat(formData.amount) / (1 + parseFloat(formData.ivaPercent) / 100)).toFixed(2)}€
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] text-zinc-500 uppercase tracking-wider">Total</p>
+                        <p className={`text-sm font-bold text-${ringColor}-400`}>
+                          {parseFloat(formData.amount).toFixed(2)}€
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <div className="flex gap-3 pt-2">
                 <button
                   onClick={() => {
                     setShowEditDialog(false);
                     setEditingId(null);
                   }}
-                  className="flex-1 px-4 py-2 border border-zinc-700 rounded-lg text-zinc-300 font-semibold hover:bg-zinc-950"
+                  className="flex-1 px-4 py-2.5 border border-zinc-700 rounded-lg text-zinc-300 font-semibold hover:bg-zinc-800 transition-all"
                 >
                   Cancelar
                 </button>
                 <button
                   onClick={saveEditInvoice}
-                  className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700"
+                  className={`flex-1 px-4 py-2.5 bg-gradient-to-r from-${ringColor}-500 to-${isIncome ? 'teal' : 'pink'}-600 hover:from-${ringColor}-600 hover:to-${isIncome ? 'teal' : 'pink'}-700 text-white rounded-lg font-semibold transition-all shadow-lg shadow-${ringColor}-500/20`}
                 >
                   Guardar Cambios
                 </button>
@@ -2352,7 +2471,8 @@ export default function Dashboard() {
             </div>
           </div>
         </div>
-      )}
+        );
+      })()}
 
       {/* Import Dialog */}
       {showImportDialog && (
