@@ -1163,25 +1163,27 @@ export default function Dashboard() {
                 </div>
               </div>
 
-              {/* Estado de Pagos */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="bg-gradient-to-br from-emerald-500/10 to-zinc-900 rounded-xl border border-emerald-500/20 p-5">
-                  <div className="flex items-center justify-between mb-2">
-                    <p className="text-xs font-bold text-emerald-400 tracking-widest uppercase">✓ Pagadas</p>
-                    <span className="bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-[10px] font-bold px-2 py-1 rounded">{paidInvoices.length}</span>
+              {/* Estado de Pagos - SOLO en Fact. Ingresos */}
+              {isIncome && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="bg-gradient-to-br from-emerald-500/10 to-zinc-900 rounded-xl border border-emerald-500/20 p-5">
+                    <div className="flex items-center justify-between mb-2">
+                      <p className="text-xs font-bold text-emerald-400 tracking-widest uppercase">✓ Cobradas</p>
+                      <span className="bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-[10px] font-bold px-2 py-1 rounded">{paidInvoices.length}</span>
+                    </div>
+                    <p className="text-2xl font-bold text-emerald-400">{paidAmount.toFixed(2)}€</p>
+                    <p className="text-xs text-zinc-500 mt-1">Dinero cobrado</p>
                   </div>
-                  <p className="text-2xl font-bold text-emerald-400">{paidAmount.toFixed(2)}€</p>
-                  <p className="text-xs text-zinc-500 mt-1">{isIncome ? 'Dinero cobrado' : 'Dinero pagado'}</p>
-                </div>
-                <div className="bg-gradient-to-br from-amber-500/10 to-zinc-900 rounded-xl border border-amber-500/20 p-5">
-                  <div className="flex items-center justify-between mb-2">
-                    <p className="text-xs font-bold text-amber-400 tracking-widest uppercase">⏳ Pendientes</p>
-                    <span className="bg-amber-500/20 text-amber-400 border border-amber-500/30 text-[10px] font-bold px-2 py-1 rounded">{pendingInvoices.length}</span>
+                  <div className="bg-gradient-to-br from-amber-500/10 to-zinc-900 rounded-xl border border-amber-500/20 p-5">
+                    <div className="flex items-center justify-between mb-2">
+                      <p className="text-xs font-bold text-amber-400 tracking-widest uppercase">⏳ Pendientes</p>
+                      <span className="bg-amber-500/20 text-amber-400 border border-amber-500/30 text-[10px] font-bold px-2 py-1 rounded">{pendingInvoices.length}</span>
+                    </div>
+                    <p className="text-2xl font-bold text-amber-400">{pendingAmount.toFixed(2)}€</p>
+                    <p className="text-xs text-zinc-500 mt-1">Por cobrar</p>
                   </div>
-                  <p className="text-2xl font-bold text-amber-400">{pendingAmount.toFixed(2)}€</p>
-                  <p className="text-xs text-zinc-500 mt-1">{isIncome ? 'Por cobrar' : 'Por pagar'}</p>
                 </div>
-              </div>
+              )}
 
               {/* Desglose por Trimestre */}
               <div>
@@ -1216,7 +1218,7 @@ export default function Dashboard() {
                           <th className="text-right py-3 px-3 text-xs font-bold text-zinc-400 tracking-wider uppercase">IVA</th>
                           <th className="text-right py-3 px-3 text-xs font-bold text-zinc-400 tracking-wider uppercase">Total</th>
                           <th className="text-left py-3 px-3 text-xs font-bold text-zinc-400 tracking-wider uppercase">Fecha</th>
-                          <th className="text-center py-3 px-3 text-xs font-bold text-zinc-400 tracking-wider uppercase">Pagado</th>
+                          {isIncome && <th className="text-center py-3 px-3 text-xs font-bold text-zinc-400 tracking-wider uppercase">Cobrada</th>}
                           <th className="text-center py-3 px-3 text-xs font-bold text-zinc-400 tracking-wider uppercase">Acciones</th>
                         </tr>
                       </thead>
@@ -1251,22 +1253,24 @@ export default function Dashboard() {
                               <td className="py-3 px-3 text-right text-amber-400 text-sm whitespace-nowrap">{iva.toFixed(2)}€</td>
                               <td className={`py-3 px-3 text-right font-bold text-${colorClass}-400 whitespace-nowrap`}>{inv.amount.toFixed(2)}€</td>
                               <td className="py-3 px-3 text-zinc-400 text-sm whitespace-nowrap">{inv.date}</td>
-                              <td className="py-3 px-3 text-center">
-                                <label className="inline-flex items-center cursor-pointer" title={inv.paid ? 'Pagado' : 'Pendiente'}>
-                                  <input
-                                    type="checkbox"
-                                    checked={inv.paid || false}
-                                    onChange={() => togglePaid(inv.id)}
-                                    className="sr-only peer"
-                                  />
-                                  <div className={`w-10 h-5 rounded-full transition-all relative ${inv.paid ? 'bg-emerald-500' : 'bg-zinc-700'}`}>
-                                    <div className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white transition-all ${inv.paid ? 'translate-x-5' : ''}`}></div>
+                              {isIncome && (
+                                <td className="py-3 px-3 text-center">
+                                  <label className="inline-flex items-center cursor-pointer" title={inv.paid ? 'Cobrada' : 'Pendiente de cobro'}>
+                                    <input
+                                      type="checkbox"
+                                      checked={inv.paid || false}
+                                      onChange={() => togglePaid(inv.id)}
+                                      className="sr-only peer"
+                                    />
+                                    <div className={`w-10 h-5 rounded-full transition-all relative ${inv.paid ? 'bg-emerald-500' : 'bg-zinc-700'}`}>
+                                      <div className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white transition-all ${inv.paid ? 'translate-x-5' : ''}`}></div>
+                                    </div>
+                                  </label>
+                                  <div className={`text-[10px] mt-1 font-semibold ${inv.paid ? 'text-emerald-400' : 'text-amber-400'}`}>
+                                    {inv.paid ? '✓ Cobrada' : 'Pendiente'}
                                   </div>
-                                </label>
-                                <div className={`text-[10px] mt-1 font-semibold ${inv.paid ? 'text-emerald-400' : 'text-amber-400'}`}>
-                                  {inv.paid ? '✓ Pagada' : 'Pendiente'}
-                                </div>
-                              </td>
+                                </td>
+                              )}
                               <td className="py-3 px-3 text-center">
                                 <div className="flex items-center justify-center gap-1">
                                   <button
