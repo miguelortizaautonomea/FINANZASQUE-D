@@ -1331,29 +1331,52 @@ export default function Dashboard() {
             i.date >= minDate
           );
 
-          // Agrupar por empresa y mes
-          const months = ['04', '05', '06', '07']; // Abril, Mayo, Junio, Julio
+          const months = ['04', '05', '06', '07'];
           const monthNames = { '04': 'Abril', '05': 'Mayo', '06': 'Junio', '07': 'Julio' };
 
-          // Map: empresa → { '04': total, '05': total, ... }
-          const grouped: Record<string, Record<string, { total: number; count: number }>> = {};
+          // Proveedores fijos con sus aliases para matching
+          const PROVIDERS = [
+            { display: 'ChatGPT', aliases: ['chatgpt', 'openai'] },
+            { display: 'N8N', aliases: ['n8n'] },
+            { display: 'Verificado Meta', aliases: ['verificado meta', 'meta verified', 'meta'] },
+            { display: 'GHL Agency', aliases: ['ghl', 'gohighlevel', 'high level', 'highlevel'] },
+            { display: 'Loom', aliases: ['loom'] },
+            { display: 'Google Workspace', aliases: ['google workspace', 'g.workspace', 'gworkspace', 'workspace'] },
+            { display: 'Smartlead', aliases: ['smartlead'] },
+            { display: 'Mailerlite', aliases: ['mailerlite', 'mailer lite'] },
+            { display: 'Claude', aliases: ['claude', 'anthropic'] },
+            { display: 'Slack', aliases: ['slack'] },
+            { display: 'Stripe', aliases: ['stripe'] },
+          ];
 
-          for (const inv of expenseInvoices) {
-            const company = inv.company;
-            const month = inv.date.slice(5, 7);
-            if (!months.includes(month)) continue;
-            if (!grouped[company]) grouped[company] = {};
-            if (!grouped[company][month]) grouped[company][month] = { total: 0, count: 0 };
-            grouped[company][month].total += inv.amount;
-            grouped[company][month].count += 1;
+          // Agrupar facturas por proveedor predefinido y mes
+          // Devuelve: { providerDisplay: { '04': { total, count, invoices }, ... } }
+          const grouped: Record<string, Record<string, { total: number; count: number; invoices: Invoice[] }>> = {};
+
+          // Inicializar
+          for (const p of PROVIDERS) {
+            grouped[p.display] = {};
           }
 
-          // Ordenar empresas por total facturado
-          const companies = Object.keys(grouped).sort((a, b) => {
-            const totalA = Object.values(grouped[a]).reduce((s, m) => s + m.total, 0);
-            const totalB = Object.values(grouped[b]).reduce((s, m) => s + m.total, 0);
-            return totalB - totalA;
-          });
+          for (const inv of expenseInvoices) {
+            const companyLower = inv.company.toLowerCase();
+            const month = inv.date.slice(5, 7);
+            if (!months.includes(month)) continue;
+
+            // Buscar a qué proveedor predefinido pertenece
+            for (const p of PROVIDERS) {
+              if (p.aliases.some(a => companyLower.includes(a))) {
+                if (!grouped[p.display][month]) grouped[p.display][month] = { total: 0, count: 0, invoices: [] };
+                grouped[p.display][month].total += inv.amount;
+                grouped[p.display][month].count += 1;
+                grouped[p.display][month].invoices.push(inv);
+                break;
+              }
+            }
+          }
+
+          // Lista de proveedores (mantener orden definido)
+          const companies = PROVIDERS.map(p => p.display);
 
           // Detectar suscripciones recurrentes (presentes en 2+ meses)
           const recurrent = companies.filter(c => Object.keys(grouped[c]).length >= 2);
@@ -1450,16 +1473,22 @@ export default function Dashboard() {
                                 const data = grouped[company][m];
                                 const hasInvoice = !!data;
                                 const isCurrentCol = m === currentMonth;
-                                // Si es recurrente y este mes falta → warning
                                 const isMissing = isRecurrent && !hasInvoice && parseInt(m) <= parseInt(currentMonth);
 
                                 return (
                                   <td key={m} className={`py-3 px-4 text-right ${isCurrentCol ? 'bg-cyan-500/5' : ''}`}>
                                     {hasInvoice ? (
-                                      <div>
-                                        <p className="text-sm font-bold text-white whitespace-nowrap">{data.total.toFixed(2)}€</p>
+                                      <button
+                                        onClick={() => {
+                                          // Editar la primera factura de ese proveedor/mes
+                                          startEditInvoice(data.invoices[0]);
+                                        }}
+                                        className="group w-full text-right hover:bg-zinc-800/50 rounded px-2 py-1 -mx-2 transition-all"
+                                        title={`Editar (${data.count} factura${data.count > 1 ? 's' : ''})`}
+                                      >
+                                        <p className="text-sm font-bold text-white whitespace-nowrap group-hover:text-cyan-300">{data.total.toFixed(2)}€ ✏️</p>
                                         <p className="text-[10px] text-emerald-400 mt-0.5">✓ {data.count} fact.</p>
-                                      </div>
+                                      </button>
                                     ) : isMissing ? (
                                       <div>
                                         <p className="text-sm text-rose-400 font-semibold">—</p>
