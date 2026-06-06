@@ -1444,15 +1444,33 @@ export default function Dashboard() {
               <Filter size={24} className="text-blue-400" />
               Filtros y Búsqueda
             </h2>
-            {(searchText || dateFrom || dateTo || filterType !== 'all' || filterCategory !== 'all' || sortBy !== 'date-desc') && (
+            <div className="flex gap-2 items-center">
+              {/* Mostrar si hay cambios respecto al default (mes actual) */}
+              {(searchText || dateFrom !== firstDayOfMonth || dateTo !== lastDayOfMonth || filterType !== 'all' || filterCategory !== 'all' || sortBy !== 'date-desc') && (
+                <button
+                  onClick={clearFilters}
+                  className="text-sm bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 border border-blue-500/30 font-semibold flex items-center gap-1 px-3 py-1.5 rounded-lg transition-all"
+                >
+                  <X size={14} />
+                  Volver al mes actual
+                </button>
+              )}
+              {/* Botón para ver TODOS los registros */}
               <button
-                onClick={clearFilters}
-                className="text-sm text-blue-400 hover:text-blue-400 font-semibold flex items-center gap-1"
+                onClick={() => {
+                  setDateFrom('');
+                  setDateTo('');
+                  setFilterType('all');
+                  setFilterCategory('all');
+                  setSearchText('');
+                  setSortBy('date-desc');
+                }}
+                className="text-sm bg-zinc-800 hover:bg-zinc-700 text-zinc-300 border border-zinc-700 font-semibold flex items-center gap-1 px-3 py-1.5 rounded-lg transition-all"
               >
-                <X size={16} />
-                Limpiar filtros
+                <Filter size={14} />
+                Ver todos
               </button>
-            )}
+            </div>
           </div>
 
           {/* Search */}
