@@ -1583,10 +1583,40 @@ export default function Dashboard() {
           </div>
         </div>
 
+        {/* Quick Add Buttons */}
+        <div className="bg-gradient-to-r from-zinc-900 to-zinc-900/50 rounded-xl border border-zinc-800 p-5 mb-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="text-sm font-bold text-white tracking-tight flex items-center gap-2">
+                <Plus size={18} className="text-emerald-400" />
+                Añadir Transacción Manual
+              </h3>
+              <p className="text-xs text-zinc-500 mt-0.5">Registra rápidamente un nuevo ingreso o gasto</p>
+            </div>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowIncomeDialog(true)}
+                className="bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white font-semibold py-2.5 px-5 rounded-lg flex items-center gap-2 transition-all shadow-lg shadow-emerald-500/20 hover:scale-[1.02]"
+              >
+                <TrendingUp size={18} />
+                <span>Ingreso</span>
+              </button>
+              <button
+                onClick={() => setShowExpenseDialog(true)}
+                className="bg-gradient-to-r from-rose-500 to-pink-600 hover:from-rose-600 hover:to-pink-700 text-white font-semibold py-2.5 px-5 rounded-lg flex items-center gap-2 transition-all shadow-lg shadow-rose-500/20 hover:scale-[1.02]"
+              >
+                <TrendingDown size={18} />
+                <span>Gasto</span>
+              </button>
+            </div>
+          </div>
+        </div>
+
         {/* Table */}
         <div className="bg-zinc-900 rounded-xl border border-zinc-800 overflow-hidden">
-          <div className="px-6 py-4 border-b border-zinc-800 bg-zinc-950">
+          <div className="px-6 py-4 border-b border-zinc-800 bg-zinc-950 flex items-center justify-between">
             <h2 className="text-lg font-bold text-white">Historial de Transacciones</h2>
+            <span className="text-xs text-zinc-500">{filteredInvoices.length} registros</span>
           </div>
 
           {filteredInvoices.length > 0 ? (
@@ -1697,106 +1727,103 @@ export default function Dashboard() {
       </div>
       </div>
 
-      {/* Income Dialog */}
+      {/* Income Dialog - Simplificado */}
       {showIncomeDialog && (
-        <div className="fixed inset-0 bg-black bg-opacity-30 flex items-center justify-center p-4 z-50 backdrop-blur-sm">
-          <div className="bg-zinc-900 border border-zinc-800 rounded-xl shadow-2xl max-w-md w-full p-8">
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50 backdrop-blur-sm">
+          <div className="bg-zinc-900 border border-emerald-500/30 rounded-2xl shadow-2xl shadow-emerald-500/10 max-w-md w-full p-8">
             <div className="flex items-center justify-between mb-6">
-              <h2 className="text-2xl font-bold text-white">Registrar Ingreso</h2>
+              <div className="flex items-center gap-3">
+                <div className="bg-gradient-to-br from-emerald-500 to-teal-600 p-2.5 rounded-xl shadow-lg shadow-emerald-500/20">
+                  <TrendingUp size={20} className="text-white" />
+                </div>
+                <div>
+                  <h2 className="text-xl font-bold text-white">Nuevo Ingreso</h2>
+                  <p className="text-xs text-zinc-500">Registrar entrada de dinero</p>
+                </div>
+              </div>
               <button
                 onClick={() => setShowIncomeDialog(false)}
-                className="text-zinc-600 hover:text-zinc-400"
+                className="text-zinc-600 hover:text-white p-1 rounded-lg hover:bg-zinc-800 transition-all"
               >
-                <X size={24} />
+                <X size={20} />
               </button>
             </div>
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-semibold text-zinc-300 mb-2">Número de factura</label>
-                <input
-                  type="text"
-                  value={formData.number}
-                  onChange={(e) => setFormData({ ...formData, number: e.target.value })}
-                  placeholder="Número de factura"
-                  className="w-full px-4 py-2 border border-zinc-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 text-white bg-zinc-950"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-semibold text-zinc-300 mb-2">Empresa/Cliente</label>
+                <label className="block text-xs font-bold text-zinc-400 mb-2 tracking-wider uppercase">Descripción *</label>
                 <input
                   type="text"
                   value={formData.company}
-                  onChange={(e) => setFormData({ ...formData, company: e.target.value })}
-                  placeholder="Empresa/Cliente"
-                  className="w-full px-4 py-2 border border-zinc-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 text-white bg-zinc-950"
+                  onChange={(e) => setFormData({ ...formData, company: e.target.value, number: e.target.value })}
+                  placeholder="Ej: Factura cliente, Sueldo, Venta..."
+                  className="w-full px-4 py-2.5 border border-zinc-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 text-white bg-zinc-950 placeholder:text-zinc-600"
                 />
               </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-zinc-400 mb-2 tracking-wider uppercase">Monto *</label>
+                  <div className="relative">
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={formData.amount}
+                      onChange={(e) => setFormData({ ...formData, amount: e.target.value, amountWithoutVAT: e.target.value })}
+                      placeholder="0.00"
+                      className="w-full px-4 py-2.5 pr-8 border border-zinc-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 text-white bg-zinc-950 placeholder:text-zinc-600"
+                    />
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 text-sm">€</span>
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-zinc-400 mb-2 tracking-wider uppercase">Fecha</label>
+                  <input
+                    type="date"
+                    value={formData.date}
+                    onChange={(e) => setFormData({ ...formData, date: e.target.value })}
+                    className="w-full px-4 py-2.5 border border-zinc-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 text-white bg-zinc-950"
+                  />
+                </div>
+              </div>
               <div>
-                <label className="block text-sm font-semibold text-zinc-300 mb-2">Método de Pago</label>
+                <label className="block text-xs font-bold text-zinc-400 mb-2 tracking-wider uppercase">Método de Pago</label>
                 <select
                   value={formData.method}
                   onChange={(e) => setFormData({ ...formData, method: e.target.value })}
-                  className="w-full px-4 py-2 border border-zinc-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 text-white bg-zinc-950"
+                  className="w-full px-4 py-2.5 border border-zinc-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 text-white bg-zinc-950"
                 >
                   {METHODS.map((m) => (
-                    <option key={m} value={m}>
-                      {m}
-                    </option>
+                    <option key={m} value={m}>{m}</option>
                   ))}
                 </select>
               </div>
-              <div>
-                <label className="block text-sm font-semibold text-zinc-300 mb-2">Fecha</label>
+              <label className="flex items-center justify-between p-3 bg-zinc-950 border border-zinc-800 rounded-lg cursor-pointer hover:border-emerald-500/30 transition-all">
+                <div className="flex items-center gap-3">
+                  <FileText size={16} className="text-emerald-400" />
+                  <div>
+                    <p className="text-sm font-semibold text-white">Tiene factura</p>
+                    <p className="text-[10px] text-zinc-500">Incluir en contabilidad fiscal</p>
+                  </div>
+                </div>
                 <input
-                  type="date"
-                  value={formData.date}
-                  onChange={(e) => setFormData({ ...formData, date: e.target.value })}
-                  className="w-full px-4 py-2 border border-zinc-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 text-white bg-zinc-950"
+                  type="checkbox"
+                  checked={selectedFile !== null}
+                  onChange={(e) => setSelectedFile(e.target.checked ? new File([], 'manual') : null)}
+                  className="sr-only peer"
                 />
-              </div>
-              <div>
-                <label className="block text-sm font-semibold text-zinc-300 mb-2">Monto (Con IVA)</label>
-                <input
-                  type="number"
-                  step="0.01"
-                  value={formData.amount}
-                  onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
-                  placeholder="Monto (Con IVA)"
-                  className="w-full px-4 py-2 border border-zinc-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 text-white bg-zinc-950"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-semibold text-zinc-300 mb-2">Monto (Sin IVA)</label>
-                <input
-                  type="number"
-                  step="0.01"
-                  value={formData.amountWithoutVAT}
-                  onChange={(e) => setFormData({ ...formData, amountWithoutVAT: e.target.value })}
-                  placeholder="Monto (Sin IVA)"
-                  className="w-full px-4 py-2 border border-zinc-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 text-white bg-zinc-950"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-semibold text-zinc-300 mb-2">Archivo PDF</label>
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept=".pdf"
-                  onChange={handleFileSelect}
-                  className="w-full px-4 py-2 border border-zinc-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 text-white bg-zinc-950"
-                />
-              </div>
-              {selectedFile && <p className="text-sm text-emerald-400">✓ {selectedFile.name}</p>}
-              <div className="flex gap-3 pt-4">
+                <div className={`w-10 h-5 rounded-full transition-all relative ${selectedFile ? 'bg-emerald-500' : 'bg-zinc-700'}`}>
+                  <div className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white transition-all ${selectedFile ? 'translate-x-5' : ''}`}></div>
+                </div>
+              </label>
+              <div className="flex gap-3 pt-2">
                 <button
                   onClick={() => setShowIncomeDialog(false)}
-                  className="flex-1 px-4 py-2 border border-zinc-700 rounded-lg text-zinc-300 font-semibold hover:bg-zinc-950"
+                  className="flex-1 px-4 py-2.5 border border-zinc-700 rounded-lg text-zinc-300 font-semibold hover:bg-zinc-800 transition-all"
                 >
                   Cancelar
                 </button>
                 <button
                   onClick={() => handleAddInvoice('income')}
-                  className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700"
+                  className="flex-1 px-4 py-2.5 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white rounded-lg font-semibold transition-all shadow-lg shadow-emerald-500/20"
                 >
                   Guardar
                 </button>
@@ -1811,115 +1838,112 @@ export default function Dashboard() {
         <div className="fixed inset-0 bg-black bg-opacity-30 flex items-center justify-center p-4 z-50 backdrop-blur-sm">
           <div className="bg-zinc-900 border border-zinc-800 rounded-xl shadow-2xl max-w-md w-full p-8">
             <div className="flex items-center justify-between mb-6">
-              <h2 className="text-2xl font-bold text-white">Registrar Gasto</h2>
+              <div className="flex items-center gap-3">
+                <div className="bg-gradient-to-br from-rose-500 to-pink-600 p-2.5 rounded-xl shadow-lg shadow-rose-500/20">
+                  <TrendingDown size={20} className="text-white" />
+                </div>
+                <div>
+                  <h2 className="text-xl font-bold text-white">Nuevo Gasto</h2>
+                  <p className="text-xs text-zinc-500">Registrar salida de dinero</p>
+                </div>
+              </div>
               <button
                 onClick={() => setShowExpenseDialog(false)}
-                className="text-zinc-600 hover:text-zinc-400"
+                className="text-zinc-600 hover:text-white p-1 rounded-lg hover:bg-zinc-800 transition-all"
               >
-                <X size={24} />
+                <X size={20} />
               </button>
             </div>
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-semibold text-zinc-300 mb-2">Número de factura</label>
-                <input
-                  type="text"
-                  value={formData.number}
-                  onChange={(e) => setFormData({ ...formData, number: e.target.value })}
-                  placeholder="Número de factura"
-                  className="w-full px-4 py-2 border border-zinc-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 text-white bg-zinc-950"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-semibold text-zinc-300 mb-2">Proveedor/Empresa</label>
+                <label className="block text-xs font-bold text-zinc-400 mb-2 tracking-wider uppercase">Descripción *</label>
                 <input
                   type="text"
                   value={formData.company}
-                  onChange={(e) => setFormData({ ...formData, company: e.target.value })}
-                  placeholder="Proveedor/Empresa"
-                  className="w-full px-4 py-2 border border-zinc-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 text-white bg-zinc-950"
+                  onChange={(e) => setFormData({ ...formData, company: e.target.value, number: e.target.value })}
+                  placeholder="Ej: Mercadona, Spotify, Gasolina..."
+                  className="w-full px-4 py-2.5 border border-zinc-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-rose-500 focus:border-rose-500 text-white bg-zinc-950 placeholder:text-zinc-600"
                 />
               </div>
-              <div>
-                <label className="block text-sm font-semibold text-zinc-300 mb-2">Categoría</label>
-                <select
-                  value={formData.category}
-                  onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-                  className="w-full px-4 py-2 border border-zinc-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 text-white bg-zinc-950"
-                >
-                  {CATEGORIES.map((cat) => (
-                    <option key={cat} value={cat}>
-                      {cat}
-                    </option>
-                  ))}
-                </select>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-zinc-400 mb-2 tracking-wider uppercase">Monto *</label>
+                  <div className="relative">
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={formData.amount}
+                      onChange={(e) => setFormData({ ...formData, amount: e.target.value, amountWithoutVAT: e.target.value })}
+                      placeholder="0.00"
+                      className="w-full px-4 py-2.5 pr-8 border border-zinc-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-rose-500 focus:border-rose-500 text-white bg-zinc-950 placeholder:text-zinc-600"
+                    />
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 text-sm">€</span>
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-zinc-400 mb-2 tracking-wider uppercase">Fecha</label>
+                  <input
+                    type="date"
+                    value={formData.date}
+                    onChange={(e) => setFormData({ ...formData, date: e.target.value })}
+                    className="w-full px-4 py-2.5 border border-zinc-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-rose-500 text-white bg-zinc-950"
+                  />
+                </div>
               </div>
-              <div>
-                <label className="block text-sm font-semibold text-zinc-300 mb-2">Método de Pago</label>
-                <select
-                  value={formData.method}
-                  onChange={(e) => setFormData({ ...formData, method: e.target.value })}
-                  className="w-full px-4 py-2 border border-zinc-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 text-white bg-zinc-950"
-                >
-                  {METHODS.map((m) => (
-                    <option key={m} value={m}>
-                      {m}
-                    </option>
-                  ))}
-                </select>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-zinc-400 mb-2 tracking-wider uppercase">Categoría</label>
+                  <select
+                    value={formData.category}
+                    onChange={(e) => setFormData({ ...formData, category: e.target.value })}
+                    className="w-full px-4 py-2.5 border border-zinc-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-rose-500 text-white bg-zinc-950"
+                  >
+                    {CATEGORIES.map((cat) => (
+                      <option key={cat} value={cat}>{cat}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-zinc-400 mb-2 tracking-wider uppercase">Método</label>
+                  <select
+                    value={formData.method}
+                    onChange={(e) => setFormData({ ...formData, method: e.target.value })}
+                    className="w-full px-4 py-2.5 border border-zinc-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-rose-500 text-white bg-zinc-950"
+                  >
+                    {METHODS.map((m) => (
+                      <option key={m} value={m}>{m}</option>
+                    ))}
+                  </select>
+                </div>
               </div>
-              <div>
-                <label className="block text-sm font-semibold text-zinc-300 mb-2">Fecha</label>
+              <label className="flex items-center justify-between p-3 bg-zinc-950 border border-zinc-800 rounded-lg cursor-pointer hover:border-rose-500/30 transition-all">
+                <div className="flex items-center gap-3">
+                  <FileText size={16} className="text-rose-400" />
+                  <div>
+                    <p className="text-sm font-semibold text-white">Tiene factura</p>
+                    <p className="text-[10px] text-zinc-500">Incluir en contabilidad fiscal</p>
+                  </div>
+                </div>
                 <input
-                  type="date"
-                  value={formData.date}
-                  onChange={(e) => setFormData({ ...formData, date: e.target.value })}
-                  className="w-full px-4 py-2 border border-zinc-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 text-white bg-zinc-950"
+                  type="checkbox"
+                  checked={selectedFile !== null}
+                  onChange={(e) => setSelectedFile(e.target.checked ? new File([], 'manual') : null)}
+                  className="sr-only peer"
                 />
-              </div>
-              <div>
-                <label className="block text-sm font-semibold text-zinc-300 mb-2">Monto (Con IVA)</label>
-                <input
-                  type="number"
-                  step="0.01"
-                  value={formData.amount}
-                  onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
-                  placeholder="Monto (Con IVA)"
-                  className="w-full px-4 py-2 border border-zinc-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 text-white bg-zinc-950"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-semibold text-zinc-300 mb-2">Monto (Sin IVA)</label>
-                <input
-                  type="number"
-                  step="0.01"
-                  value={formData.amountWithoutVAT}
-                  onChange={(e) => setFormData({ ...formData, amountWithoutVAT: e.target.value })}
-                  placeholder="Monto (Sin IVA)"
-                  className="w-full px-4 py-2 border border-zinc-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 text-white bg-zinc-950"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-semibold text-zinc-300 mb-2">Archivo PDF</label>
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept=".pdf"
-                  onChange={handleFileSelect}
-                  className="w-full px-4 py-2 border border-zinc-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 text-white bg-zinc-950"
-                />
-              </div>
-              {selectedFile && <p className="text-sm text-emerald-400">✓ {selectedFile.name}</p>}
-              <div className="flex gap-3 pt-4">
+                <div className={`w-10 h-5 rounded-full transition-all relative ${selectedFile ? 'bg-rose-500' : 'bg-zinc-700'}`}>
+                  <div className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white transition-all ${selectedFile ? 'translate-x-5' : ''}`}></div>
+                </div>
+              </label>
+              <div className="flex gap-3 pt-2">
                 <button
                   onClick={() => setShowExpenseDialog(false)}
-                  className="flex-1 px-4 py-2 border border-zinc-700 rounded-lg text-zinc-300 font-semibold hover:bg-zinc-950"
+                  className="flex-1 px-4 py-2.5 border border-zinc-700 rounded-lg text-zinc-300 font-semibold hover:bg-zinc-800 transition-all"
                 >
                   Cancelar
                 </button>
                 <button
                   onClick={() => handleAddInvoice('expense')}
-                  className="flex-1 px-4 py-2 bg-slate-700 text-white rounded-lg font-semibold hover:bg-slate-800"
+                  className="flex-1 px-4 py-2.5 bg-gradient-to-r from-rose-500 to-pink-600 hover:from-rose-600 hover:to-pink-700 text-white rounded-lg font-semibold transition-all shadow-lg shadow-rose-500/20"
                 >
                   Guardar
                 </button>
