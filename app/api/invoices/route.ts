@@ -68,16 +68,8 @@ function parseDateDDMMYYYY(dateStr: string): string | null {
 
 export async function GET() {
   try {
-    // Try to read from root first, fallback to public
-    let csvText: string;
-    try {
-      const filePath = join(process.cwd(), 'combined.csv');
-      csvText = readFileSync(filePath, 'utf-8');
-    } catch {
-      // Fallback to public folder
-      const publicPath = join(process.cwd(), 'public', 'combined.csv');
-      csvText = readFileSync(publicPath, 'utf-8');
-    }
+    const filePath = join(process.cwd(), 'public', 'combined.csv');
+    const csvText = readFileSync(filePath, 'utf-8');
 
     const lines = csvText.split('\n').filter(line => line.trim());
     const invoices: any[] = [];
