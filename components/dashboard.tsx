@@ -67,7 +67,7 @@ interface Invoice {
 const CATEGORIES = ['comidas', 'caballo', 'deporte', 'work', 'ocio', 'caprichos', 'viajes', 'campo', 'regalos', 'coche', 'desayuno'];
 const METHODS = ['Tarjeta', 'Efectivo', 'Transferencia', 'Bizum', 'PayPal', 'Otro'];
 
-type ViewType = 'dashboard' | 'transactions' | 'accounting' | 'invoices-income' | 'invoices-expense' | 'categories' | 'settings';
+type ViewType = 'dashboard' | 'transactions' | 'accounting' | 'invoices-income' | 'invoices-expense' | 'subscriptions' | 'categories' | 'settings';
 
 export default function Dashboard() {
   const [activeView, setActiveView] = useState<ViewType>('dashboard');
@@ -723,6 +723,7 @@ export default function Dashboard() {
       { id: 'accounting' as ViewType, label: 'Contabilidad', icon: Calculator, badge: 'Q' + accountingData.currentQuarter },
       { id: 'invoices-income' as ViewType, label: 'Fact. Ingresos', icon: TrendingUp, badge: invoicesIncomeCount },
       { id: 'invoices-expense' as ViewType, label: 'Fact. Gastos', icon: TrendingDown, badge: invoicesExpenseCount },
+      { id: 'subscriptions' as ViewType, label: 'Suscripciones', icon: RefreshCw, badge: null },
       { id: 'categories' as ViewType, label: 'Categorías', icon: Tag, badge: null },
       { id: 'settings' as ViewType, label: 'Configuración', icon: Settings, badge: null },
     ];
@@ -1314,6 +1315,226 @@ export default function Dashboard() {
                     </button>
                   </div>
                 )}
+              </div>
+            </div>
+          );
+        })()}
+
+        {/* VISTA DE SUSCRIPCIONES MENSUALES */}
+        {activeView === 'subscriptions' && (() => {
+          // Solo gastos con factura desde Abril
+          const currentYear = new Date().getFullYear();
+          const minDate = `${currentYear}-04-01`;
+          const expenseInvoices = invoices.filter(i =>
+            i.type === 'expense' &&
+            i.hasInvoice === true &&
+            i.date >= minDate
+          );
+
+          // Agrupar por empresa y mes
+          const months = ['04', '05', '06', '07']; // Abril, Mayo, Junio, Julio
+          const monthNames = { '04': 'Abril', '05': 'Mayo', '06': 'Junio', '07': 'Julio' };
+
+          // Map: empresa → { '04': total, '05': total, ... }
+          const grouped: Record<string, Record<string, { total: number; count: number }>> = {};
+
+          for (const inv of expenseInvoices) {
+            const company = inv.company;
+            const month = inv.date.slice(5, 7);
+            if (!months.includes(month)) continue;
+            if (!grouped[company]) grouped[company] = {};
+            if (!grouped[company][month]) grouped[company][month] = { total: 0, count: 0 };
+            grouped[company][month].total += inv.amount;
+            grouped[company][month].count += 1;
+          }
+
+          // Ordenar empresas por total facturado
+          const companies = Object.keys(grouped).sort((a, b) => {
+            const totalA = Object.values(grouped[a]).reduce((s, m) => s + m.total, 0);
+            const totalB = Object.values(grouped[b]).reduce((s, m) => s + m.total, 0);
+            return totalB - totalA;
+          });
+
+          // Detectar suscripciones recurrentes (presentes en 2+ meses)
+          const recurrent = companies.filter(c => Object.keys(grouped[c]).length >= 2);
+
+          // Calcular totales por mes
+          const monthTotals: Record<string, number> = {};
+          for (const m of months) {
+            monthTotals[m] = expenseInvoices
+              .filter(i => i.date.slice(5, 7) === m)
+              .reduce((s, i) => s + i.amount, 0);
+          }
+
+          // Detectar mes actual para destacar
+          const currentMonth = String(new Date().getMonth() + 1).padStart(2, '0');
+
+          return (
+            <div className="space-y-6">
+              {/* Hero Header */}
+              <div className="relative bg-gradient-to-br from-zinc-900 via-zinc-900 to-cyan-950/30 rounded-2xl p-8 border border-zinc-800 overflow-hidden">
+                <div className="absolute top-0 right-0 w-96 h-96 bg-cyan-500/5 rounded-full -mr-48 -mt-48 blur-3xl"></div>
+                <div className="relative flex items-center justify-between">
+                  <div className="flex items-center gap-5">
+                    <div className="bg-gradient-to-br from-cyan-500 to-blue-600 p-4 rounded-2xl shadow-lg shadow-cyan-500/20">
+                      <RefreshCw size={32} className="text-white" />
+                    </div>
+                    <div>
+                      <h1 className="text-3xl font-bold text-white tracking-tight">Suscripciones Mensuales</h1>
+                      <p className="text-zinc-400 text-sm mt-1">
+                        Control de gastos recurrentes · <span className="text-cyan-400 font-semibold">{companies.length} proveedores</span>
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Resumen por mes */}
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                {months.map(m => {
+                  const isCurrentMonth = m === currentMonth;
+                  return (
+                    <div
+                      key={m}
+                      className={`rounded-xl border p-5 ${
+                        isCurrentMonth
+                          ? 'bg-gradient-to-br from-cyan-500/10 to-zinc-900 border-cyan-500/30 ring-1 ring-cyan-500/20'
+                          : 'bg-zinc-900 border-zinc-800'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between mb-2">
+                        <p className={`text-xs font-bold tracking-widest uppercase ${isCurrentMonth ? 'text-cyan-400' : 'text-zinc-400'}`}>{monthNames[m as keyof typeof monthNames]}</p>
+                        {isCurrentMonth && (
+                          <span className="bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 text-[10px] font-bold px-2 py-0.5 rounded">ACTUAL</span>
+                        )}
+                      </div>
+                      <p className="text-2xl font-bold text-white">{monthTotals[m].toFixed(2)}€</p>
+                      <p className="text-xs text-zinc-500 mt-1">{expenseInvoices.filter(i => i.date.slice(5, 7) === m).length} facturas</p>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Tabla comparativa */}
+              <div className="bg-zinc-900 rounded-xl border border-zinc-800 overflow-hidden">
+                <div className="px-6 py-4 border-b border-zinc-800 bg-zinc-950 flex items-center justify-between">
+                  <h2 className="text-lg font-bold text-white">Comparativa por Proveedor</h2>
+                  <span className="text-xs text-zinc-500">{recurrent.length} suscripciones recurrentes</span>
+                </div>
+                {companies.length > 0 ? (
+                  <div className="overflow-x-auto">
+                    <table className="w-full">
+                      <thead className="bg-zinc-950 border-b border-zinc-800">
+                        <tr>
+                          <th className="text-left py-3 px-4 text-xs font-bold text-zinc-400 tracking-wider uppercase">Proveedor</th>
+                          {months.map(m => (
+                            <th key={m} className={`text-right py-3 px-4 text-xs font-bold tracking-wider uppercase ${m === currentMonth ? 'text-cyan-400 bg-cyan-500/5' : 'text-zinc-400'}`}>
+                              {monthNames[m as keyof typeof monthNames]}
+                            </th>
+                          ))}
+                          <th className="text-right py-3 px-4 text-xs font-bold text-zinc-400 tracking-wider uppercase">Total</th>
+                          <th className="text-center py-3 px-4 text-xs font-bold text-zinc-400 tracking-wider uppercase">Tipo</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {companies.map((company, idx) => {
+                          const isRecurrent = Object.keys(grouped[company]).length >= 2;
+                          const totalCompany = Object.values(grouped[company]).reduce((s, m) => s + m.total, 0);
+
+                          return (
+                            <tr key={company} className={`border-b border-zinc-800/50 hover:bg-zinc-800/30 transition-colors ${idx % 2 === 0 ? 'bg-zinc-900/50' : 'bg-zinc-900/20'}`}>
+                              <td className="py-3 px-4">
+                                <div className="font-semibold text-white text-sm">{company}</div>
+                              </td>
+                              {months.map(m => {
+                                const data = grouped[company][m];
+                                const hasInvoice = !!data;
+                                const isCurrentCol = m === currentMonth;
+                                // Si es recurrente y este mes falta → warning
+                                const isMissing = isRecurrent && !hasInvoice && parseInt(m) <= parseInt(currentMonth);
+
+                                return (
+                                  <td key={m} className={`py-3 px-4 text-right ${isCurrentCol ? 'bg-cyan-500/5' : ''}`}>
+                                    {hasInvoice ? (
+                                      <div>
+                                        <p className="text-sm font-bold text-white whitespace-nowrap">{data.total.toFixed(2)}€</p>
+                                        <p className="text-[10px] text-emerald-400 mt-0.5">✓ {data.count} fact.</p>
+                                      </div>
+                                    ) : isMissing ? (
+                                      <div>
+                                        <p className="text-sm text-rose-400 font-semibold">—</p>
+                                        <p className="text-[10px] text-rose-400 mt-0.5">⚠ Falta</p>
+                                      </div>
+                                    ) : (
+                                      <p className="text-sm text-zinc-600">—</p>
+                                    )}
+                                  </td>
+                                );
+                              })}
+                              <td className="py-3 px-4 text-right">
+                                <p className="font-bold text-white whitespace-nowrap">{totalCompany.toFixed(2)}€</p>
+                              </td>
+                              <td className="py-3 px-4 text-center">
+                                {isRecurrent ? (
+                                  <span className="bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 text-[10px] font-bold px-2 py-1 rounded">
+                                    ↻ Recurrente
+                                  </span>
+                                ) : (
+                                  <span className="bg-zinc-800 text-zinc-500 border border-zinc-700 text-[10px] font-bold px-2 py-1 rounded">
+                                    Único
+                                  </span>
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                      <tfoot className="bg-zinc-950 border-t-2 border-zinc-800">
+                        <tr>
+                          <td className="py-3 px-4 text-sm font-bold text-zinc-400 uppercase tracking-wider">TOTAL</td>
+                          {months.map(m => (
+                            <td key={m} className={`py-3 px-4 text-right ${m === currentMonth ? 'bg-cyan-500/5' : ''}`}>
+                              <p className="text-sm font-bold text-white">{monthTotals[m].toFixed(2)}€</p>
+                            </td>
+                          ))}
+                          <td className="py-3 px-4 text-right">
+                            <p className="text-base font-bold text-cyan-400">{Object.values(monthTotals).reduce((s, t) => s + t, 0).toFixed(2)}€</p>
+                          </td>
+                          <td></td>
+                        </tr>
+                      </tfoot>
+                    </table>
+                  </div>
+                ) : (
+                  <div className="flex flex-col items-center justify-center py-16 px-6">
+                    <RefreshCw size={48} className="text-zinc-700 mb-4" />
+                    <p className="text-zinc-400 text-lg font-semibold mb-2">No hay suscripciones todavía</p>
+                    <p className="text-zinc-500 text-sm">Añade facturas de gastos para ver el análisis aquí</p>
+                  </div>
+                )}
+              </div>
+
+              {/* Leyenda */}
+              <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5">
+                <h3 className="text-sm font-bold text-white mb-3">Leyenda</h3>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
+                  <div className="flex items-center gap-2">
+                    <span className="bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 px-2 py-1 rounded text-[10px] font-bold">↻ Recurrente</span>
+                    <span className="text-zinc-500">Aparece en 2+ meses</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-emerald-400 text-[10px] font-bold">✓ N fact.</span>
+                    <span className="text-zinc-500">Facturas registradas</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-rose-400 text-[10px] font-bold">⚠ Falta</span>
+                    <span className="text-zinc-500">No registrada (recurrente)</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-zinc-600 text-[10px] font-bold">—</span>
+                    <span className="text-zinc-500">Sin factura</span>
+                  </div>
+                </div>
               </div>
             </div>
           );
