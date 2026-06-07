@@ -571,157 +571,131 @@ export default function Dashboard() {
     font-family: 'Inter', -apple-system, 'Segoe UI', sans-serif;
     background: #f8fafc;
     color: #0f172a;
-    padding: 40px 20px;
-    line-height: 1.5;
+    padding: 20px 16px;
+    line-height: 1.4;
   }
   .invoice {
-    max-width: 820px;
+    max-width: 780px;
     margin: 0 auto;
     background: #ffffff;
-    border-radius: 24px;
-    box-shadow: 0 20px 60px rgba(15, 23, 42, 0.08);
+    border-radius: 18px;
+    box-shadow: 0 12px 40px rgba(15, 23, 42, 0.08);
     overflow: hidden;
     border: 1px solid #e2e8f0;
   }
   .hero {
     background: linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #0f172a 100%);
     color: white;
-    padding: 50px 50px 90px;
+    padding: 28px 36px 50px;
     position: relative;
     overflow: hidden;
   }
   .hero::before {
     content: '';
     position: absolute;
-    top: -100px;
-    right: -100px;
-    width: 400px;
-    height: 400px;
+    top: -80px;
+    right: -80px;
+    width: 280px;
+    height: 280px;
     background: radial-gradient(circle, rgba(16, 185, 129, 0.15), transparent 70%);
     border-radius: 50%;
   }
   .hero::after {
     content: '';
     position: absolute;
-    bottom: -150px;
+    bottom: -100px;
     left: -50px;
-    width: 300px;
-    height: 300px;
+    width: 220px;
+    height: 220px;
     background: radial-gradient(circle, rgba(59, 130, 246, 0.1), transparent 70%);
     border-radius: 50%;
   }
   .hero-grid {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    gap: 40px;
+    gap: 30px;
     position: relative;
     z-index: 1;
   }
   .brand h1 {
-    font-size: 2rem;
+    font-size: 1.4rem;
     font-weight: 700;
     letter-spacing: -0.02em;
-    margin-bottom: 4px;
-  }
-  .brand-tag {
-    display: inline-block;
-    background: rgba(16, 185, 129, 0.15);
-    color: #34d399;
-    font-size: 0.7rem;
-    font-weight: 600;
-    padding: 4px 10px;
-    border-radius: 999px;
-    border: 1px solid rgba(16, 185, 129, 0.3);
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    margin-bottom: 16px;
+    margin-bottom: 6px;
   }
   .brand-info {
     color: rgba(255,255,255,0.7);
-    font-size: 0.85rem;
-    line-height: 1.7;
+    font-size: 0.75rem;
+    line-height: 1.5;
   }
   .invoice-meta {
     text-align: right;
   }
   .invoice-label {
     color: rgba(255,255,255,0.5);
-    font-size: 0.7rem;
+    font-size: 0.65rem;
     font-weight: 600;
     letter-spacing: 0.15em;
     text-transform: uppercase;
-    margin-bottom: 8px;
+    margin-bottom: 4px;
   }
   .invoice-number {
-    font-size: 2.5rem;
+    font-size: 1.8rem;
     font-weight: 800;
     letter-spacing: -0.03em;
     color: white;
-    margin-bottom: 8px;
+    margin-bottom: 4px;
   }
   .invoice-date {
     color: rgba(255,255,255,0.7);
-    font-size: 0.9rem;
-  }
-  .invoice-status {
-    display: inline-block;
-    margin-top: 16px;
-    background: rgba(245, 158, 11, 0.15);
-    color: #fbbf24;
-    border: 1px solid rgba(245, 158, 11, 0.3);
-    font-size: 0.75rem;
-    font-weight: 600;
-    padding: 6px 14px;
-    border-radius: 999px;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
+    font-size: 0.8rem;
   }
   .body {
-    padding: 60px 50px 50px;
-    margin-top: -50px;
+    padding: 30px 36px 28px;
+    margin-top: -30px;
     background: white;
-    border-radius: 24px 24px 0 0;
+    border-radius: 18px 18px 0 0;
     position: relative;
     z-index: 2;
   }
   .client-card {
     background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
     border: 1px solid #e2e8f0;
-    border-radius: 16px;
-    padding: 24px 28px;
-    margin-bottom: 40px;
+    border-radius: 12px;
+    padding: 14px 18px;
+    margin-bottom: 20px;
   }
   .section-label {
     color: #64748b;
-    font-size: 0.7rem;
+    font-size: 0.65rem;
     font-weight: 700;
     letter-spacing: 0.15em;
     text-transform: uppercase;
-    margin-bottom: 10px;
+    margin-bottom: 6px;
   }
   .client-name {
-    font-size: 1.25rem;
+    font-size: 1.05rem;
     font-weight: 700;
     color: #0f172a;
     margin-bottom: 4px;
   }
   .client-info {
     color: #475569;
-    font-size: 0.9rem;
-    line-height: 1.6;
+    font-size: 0.8rem;
+    line-height: 1.45;
   }
   .items-table {
     width: 100%;
     border-collapse: collapse;
-    margin-bottom: 30px;
+    margin-bottom: 16px;
   }
   .items-table thead th {
     background: #f8fafc;
     color: #475569;
-    font-size: 0.7rem;
+    font-size: 0.65rem;
     font-weight: 700;
     text-align: left;
-    padding: 14px 16px;
+    padding: 8px 12px;
     letter-spacing: 0.1em;
     text-transform: uppercase;
     border-bottom: 2px solid #e2e8f0;
@@ -732,10 +706,10 @@ export default function Dashboard() {
     text-align: right;
   }
   .items-table tbody td {
-    padding: 18px 16px;
+    padding: 10px 12px;
     border-bottom: 1px solid #f1f5f9;
     color: #0f172a;
-    font-size: 0.95rem;
+    font-size: 0.82rem;
   }
   .items-table tbody td:last-child,
   .items-table tbody td:nth-last-child(2),
@@ -748,27 +722,27 @@ export default function Dashboard() {
   }
   .totals {
     margin-left: auto;
-    width: 340px;
+    width: 300px;
     background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
     color: white;
-    border-radius: 16px;
-    padding: 24px 28px;
-    margin-bottom: 30px;
+    border-radius: 12px;
+    padding: 14px 20px;
+    margin-bottom: 16px;
   }
   .total-row {
     display: flex;
     justify-content: space-between;
-    padding: 8px 0;
+    padding: 4px 0;
     color: rgba(255,255,255,0.8);
-    font-size: 0.95rem;
+    font-size: 0.85rem;
   }
   .total-row.total {
     border-top: 1px solid rgba(255,255,255,0.15);
-    margin-top: 12px;
-    padding-top: 18px;
+    margin-top: 8px;
+    padding-top: 10px;
     color: white;
     font-weight: 700;
-    font-size: 1.35rem;
+    font-size: 1.1rem;
   }
   .total-row.total .amount {
     color: #34d399;
@@ -776,40 +750,41 @@ export default function Dashboard() {
   .payment-info {
     background: #f0fdf4;
     border: 1px solid #bbf7d0;
-    border-radius: 12px;
-    padding: 16px 20px;
-    margin-bottom: 24px;
+    border-radius: 10px;
+    padding: 10px 16px;
+    margin-bottom: 12px;
   }
   .payment-info-label {
     color: #15803d;
-    font-size: 0.7rem;
+    font-size: 0.65rem;
     font-weight: 700;
     letter-spacing: 0.1em;
     text-transform: uppercase;
-    margin-bottom: 4px;
+    margin-bottom: 2px;
   }
   .payment-info-text {
     color: #166534;
-    font-size: 0.9rem;
+    font-size: 0.8rem;
     font-weight: 500;
   }
   .iban {
     font-family: 'SF Mono', Monaco, monospace;
     background: white;
-    padding: 4px 8px;
-    border-radius: 6px;
+    padding: 3px 7px;
+    border-radius: 5px;
     border: 1px solid #bbf7d0;
-    margin-top: 6px;
+    margin-top: 4px;
     display: inline-block;
     color: #166534;
     font-weight: 600;
+    font-size: 0.78rem;
   }
   .legal-note {
     color: #64748b;
-    font-size: 0.75rem;
-    line-height: 1.5;
+    font-size: 0.68rem;
+    line-height: 1.4;
     text-align: center;
-    padding-top: 20px;
+    padding-top: 10px;
     border-top: 1px solid #f1f5f9;
   }
   @media print {
@@ -1637,7 +1612,11 @@ export default function Dashboard() {
                   <div className="flex gap-2">
                     {isIncome && (
                       <button
-                        onClick={() => setShowIssueDialog(true)}
+                        onClick={async () => {
+                          // Recargar facturas desde Supabase para asegurar número correcto
+                          await loadInvoices();
+                          setShowIssueDialog(true);
+                        }}
                         className="bg-gradient-to-r from-blue-500 to-indigo-600 hover:scale-105 text-white font-semibold py-3 px-5 rounded-xl flex items-center gap-2 transition-all shadow-lg shadow-blue-500/30"
                       >
                         <FileText size={18} />
