@@ -124,6 +124,21 @@ export default function Dashboard() {
 
   // Ordenamiento para Fact. Ingresos y Fact. Gastos
   const [invoiceSortBy, setInvoiceSortBy] = useState<'number-asc' | 'number-desc' | 'date-asc' | 'date-desc'>('number-asc');
+
+  // Estado para emitir nuevas facturas
+  const [showIssueDialog, setShowIssueDialog] = useState(false);
+  const [issueData, setIssueData] = useState({
+    clientName: '',
+    clientFiscalId: '',
+    clientAddress: '',
+    clientZipCode: '',
+    clientCity: '',
+    clientCountry: '',
+    concept: '',
+    units: '1',
+    pricePerUnit: '',
+    hasIVA: false,
+  });
   const fileInputRef = useRef<HTMLInputElement>(null);
   const csvInputRef = useRef<HTMLInputElement>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -510,6 +525,457 @@ export default function Dashboard() {
     } catch (e) {
       console.error('Error toggling invoice:', e);
     }
+  };
+
+  // Calcula el siguiente número de factura disponible
+  const getNextInvoiceNumber = () => {
+    const currentYear = new Date().getFullYear();
+    // Filtrar facturas de ingreso de este año que tengan número numérico
+    const issuedNumbers = invoices
+      .filter(i => i.type === 'income' && i.hasInvoice)
+      .map(i => parseInt(i.number))
+      .filter(n => !isNaN(n) && n > 0 && n < 1000); // Solo números razonables (1-999)
+
+    const maxNumber = issuedNumbers.length > 0 ? Math.max(...issuedNumbers) : 0;
+    return maxNumber + 1;
+  };
+
+  // Genera el HTML moderno de la factura emitida
+  const generateInvoiceHTML = (data: typeof issueData, invoiceNumber: string, date: string) => {
+    const units = parseFloat(data.units) || 1;
+    const pricePerUnit = parseFloat(data.pricePerUnit) || 0;
+    const subtotal = units * pricePerUnit;
+    const iva = data.hasIVA ? subtotal * 0.21 : 0;
+    const total = subtotal + iva;
+    const formatEUR = (n: number) => `${n.toFixed(2).replace('.', ',')} €`;
+
+    const dateFormatted = new Date(date).toLocaleDateString('es-ES', { day: '2-digit', month: 'long', year: 'numeric' });
+
+    return `<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Factura ${invoiceNumber} - ${data.clientName}</title>
+<style>
+  @page { size: A4; margin: 0; }
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  body {
+    font-family: 'Inter', -apple-system, 'Segoe UI', sans-serif;
+    background: #f8fafc;
+    color: #0f172a;
+    padding: 40px 20px;
+    line-height: 1.5;
+  }
+  .invoice {
+    max-width: 820px;
+    margin: 0 auto;
+    background: #ffffff;
+    border-radius: 24px;
+    box-shadow: 0 20px 60px rgba(15, 23, 42, 0.08);
+    overflow: hidden;
+    border: 1px solid #e2e8f0;
+  }
+  .hero {
+    background: linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #0f172a 100%);
+    color: white;
+    padding: 50px 50px 90px;
+    position: relative;
+    overflow: hidden;
+  }
+  .hero::before {
+    content: '';
+    position: absolute;
+    top: -100px;
+    right: -100px;
+    width: 400px;
+    height: 400px;
+    background: radial-gradient(circle, rgba(16, 185, 129, 0.15), transparent 70%);
+    border-radius: 50%;
+  }
+  .hero::after {
+    content: '';
+    position: absolute;
+    bottom: -150px;
+    left: -50px;
+    width: 300px;
+    height: 300px;
+    background: radial-gradient(circle, rgba(59, 130, 246, 0.1), transparent 70%);
+    border-radius: 50%;
+  }
+  .hero-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 40px;
+    position: relative;
+    z-index: 1;
+  }
+  .brand h1 {
+    font-size: 2rem;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    margin-bottom: 4px;
+  }
+  .brand-tag {
+    display: inline-block;
+    background: rgba(16, 185, 129, 0.15);
+    color: #34d399;
+    font-size: 0.7rem;
+    font-weight: 600;
+    padding: 4px 10px;
+    border-radius: 999px;
+    border: 1px solid rgba(16, 185, 129, 0.3);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    margin-bottom: 16px;
+  }
+  .brand-info {
+    color: rgba(255,255,255,0.7);
+    font-size: 0.85rem;
+    line-height: 1.7;
+  }
+  .invoice-meta {
+    text-align: right;
+  }
+  .invoice-label {
+    color: rgba(255,255,255,0.5);
+    font-size: 0.7rem;
+    font-weight: 600;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    margin-bottom: 8px;
+  }
+  .invoice-number {
+    font-size: 2.5rem;
+    font-weight: 800;
+    letter-spacing: -0.03em;
+    color: white;
+    margin-bottom: 8px;
+  }
+  .invoice-date {
+    color: rgba(255,255,255,0.7);
+    font-size: 0.9rem;
+  }
+  .invoice-status {
+    display: inline-block;
+    margin-top: 16px;
+    background: rgba(245, 158, 11, 0.15);
+    color: #fbbf24;
+    border: 1px solid rgba(245, 158, 11, 0.3);
+    font-size: 0.75rem;
+    font-weight: 600;
+    padding: 6px 14px;
+    border-radius: 999px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+  .body {
+    padding: 60px 50px 50px;
+    margin-top: -50px;
+    background: white;
+    border-radius: 24px 24px 0 0;
+    position: relative;
+    z-index: 2;
+  }
+  .client-card {
+    background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+    border: 1px solid #e2e8f0;
+    border-radius: 16px;
+    padding: 24px 28px;
+    margin-bottom: 40px;
+  }
+  .section-label {
+    color: #64748b;
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    margin-bottom: 10px;
+  }
+  .client-name {
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: #0f172a;
+    margin-bottom: 4px;
+  }
+  .client-info {
+    color: #475569;
+    font-size: 0.9rem;
+    line-height: 1.6;
+  }
+  .items-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 30px;
+  }
+  .items-table thead th {
+    background: #f8fafc;
+    color: #475569;
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-align: left;
+    padding: 14px 16px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    border-bottom: 2px solid #e2e8f0;
+  }
+  .items-table thead th:last-child,
+  .items-table thead th:nth-last-child(2),
+  .items-table thead th:nth-last-child(3) {
+    text-align: right;
+  }
+  .items-table tbody td {
+    padding: 18px 16px;
+    border-bottom: 1px solid #f1f5f9;
+    color: #0f172a;
+    font-size: 0.95rem;
+  }
+  .items-table tbody td:last-child,
+  .items-table tbody td:nth-last-child(2),
+  .items-table tbody td:nth-last-child(3) {
+    text-align: right;
+    white-space: nowrap;
+  }
+  .items-table tbody td:first-child {
+    font-weight: 500;
+  }
+  .totals {
+    margin-left: auto;
+    width: 340px;
+    background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+    color: white;
+    border-radius: 16px;
+    padding: 24px 28px;
+    margin-bottom: 30px;
+  }
+  .total-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 8px 0;
+    color: rgba(255,255,255,0.8);
+    font-size: 0.95rem;
+  }
+  .total-row.total {
+    border-top: 1px solid rgba(255,255,255,0.15);
+    margin-top: 12px;
+    padding-top: 18px;
+    color: white;
+    font-weight: 700;
+    font-size: 1.35rem;
+  }
+  .total-row.total .amount {
+    color: #34d399;
+  }
+  .payment-info {
+    background: #f0fdf4;
+    border: 1px solid #bbf7d0;
+    border-radius: 12px;
+    padding: 16px 20px;
+    margin-bottom: 24px;
+  }
+  .payment-info-label {
+    color: #15803d;
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    margin-bottom: 4px;
+  }
+  .payment-info-text {
+    color: #166534;
+    font-size: 0.9rem;
+    font-weight: 500;
+  }
+  .iban {
+    font-family: 'SF Mono', Monaco, monospace;
+    background: white;
+    padding: 4px 8px;
+    border-radius: 6px;
+    border: 1px solid #bbf7d0;
+    margin-top: 6px;
+    display: inline-block;
+    color: #166534;
+    font-weight: 600;
+  }
+  .legal-note {
+    color: #64748b;
+    font-size: 0.75rem;
+    line-height: 1.5;
+    text-align: center;
+    padding-top: 20px;
+    border-top: 1px solid #f1f5f9;
+  }
+  @media print {
+    body { padding: 0; background: white; }
+    .invoice { box-shadow: none; border-radius: 0; border: none; max-width: 100%; }
+  }
+</style>
+</head>
+<body>
+<div class="invoice">
+  <header class="hero">
+    <div class="hero-grid">
+      <div>
+        <span class="brand-tag">Autónomo · Servicios Digitales</span>
+        <h1 class="brand">Miguel Ángel Ortiz Cruz</h1>
+        <div class="brand-info">
+          NIF: 49549728T<br>
+          Calle Alemania 55<br>
+          21110 Aljaraque (Huelva), España<br>
+          miguelortizpersonal12@gmail.com
+        </div>
+      </div>
+      <div class="invoice-meta">
+        <div class="invoice-label">Factura</div>
+        <div class="invoice-number">Nº ${invoiceNumber}</div>
+        <div class="invoice-date">${dateFormatted}</div>
+        <div class="invoice-status">⏳ Pendiente de pago</div>
+      </div>
+    </div>
+  </header>
+  <main class="body">
+    <div class="client-card">
+      <div class="section-label">Facturar a</div>
+      <div class="client-name">${data.clientName}</div>
+      <div class="client-info">
+        ${data.clientFiscalId ? `Nº Fiscal: ${data.clientFiscalId}<br>` : ''}
+        ${data.clientAddress ? `${data.clientAddress}<br>` : ''}
+        ${[data.clientZipCode, data.clientCity].filter(Boolean).join(' ')}<br>
+        ${data.clientCountry || ''}
+      </div>
+    </div>
+
+    <div class="section-label" style="margin-bottom: 14px;">Conceptos</div>
+    <table class="items-table">
+      <thead>
+        <tr>
+          <th>Descripción</th>
+          <th>Uds.</th>
+          <th>Precio Unit.</th>
+          <th>Total</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>${data.concept}</td>
+          <td>${units}</td>
+          <td>${formatEUR(pricePerUnit)}</td>
+          <td>${formatEUR(units * pricePerUnit)}</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="totals">
+      <div class="total-row">
+        <span>Base imponible</span>
+        <span>${formatEUR(subtotal)}</span>
+      </div>
+      <div class="total-row">
+        <span>IVA (${data.hasIVA ? '21' : '0'}%)</span>
+        <span>${formatEUR(iva)}</span>
+      </div>
+      <div class="total-row total">
+        <span>TOTAL A PAGAR</span>
+        <span class="amount">${formatEUR(total)}</span>
+      </div>
+    </div>
+
+    <div class="payment-info">
+      <div class="payment-info-label">💳 Forma de pago</div>
+      <div class="payment-info-text">
+        Transferencia bancaria al siguiente IBAN:
+        <br>
+        <span class="iban">ES82 2100 7144 1902 0012 5905</span>
+      </div>
+    </div>
+
+    <div class="legal-note">
+      ${!data.hasIVA ? '<strong>OPERACIÓN EXTRACOMUNITARIA</strong> · "No sujeta a IVA por el Art. 69 y 70 de la Ley 37/92 del IVA"<br><br>' : ''}
+      Esta factura ha sido generada electrónicamente · Conserve este documento como justificante
+    </div>
+  </main>
+</div>
+</body>
+</html>`;
+  };
+
+  // Emitir nueva factura: guarda en Supabase como pendiente y abre PDF en nueva ventana
+  const handleIssueInvoice = async () => {
+    if (!issueData.clientName || !issueData.concept || !issueData.pricePerUnit) {
+      alert('Por favor completa: Cliente, Concepto y Precio');
+      return;
+    }
+
+    const units = parseFloat(issueData.units) || 1;
+    const pricePerUnit = parseFloat(issueData.pricePerUnit);
+    const subtotal = units * pricePerUnit;
+    const iva = issueData.hasIVA ? subtotal * 0.21 : 0;
+    const total = subtotal + iva;
+
+    const nextNumber = getNextInvoiceNumber();
+    const year = new Date().getFullYear();
+    const invoiceFullNumber = `${String(nextNumber).padStart(3, '0')}-${year}`;
+    const today = new Date().toISOString().split('T')[0];
+
+    // Crear el invoice en Supabase
+    const newInvoice: Invoice = {
+      id: `emitida_${nextNumber}_${Date.now()}`,
+      type: 'income',
+      category: 'work',
+      number: String(nextNumber),
+      company: issueData.clientName,
+      description: issueData.concept,
+      amount: total,
+      amountWithoutVAT: subtotal,
+      vat: iva,
+      date: today,
+      fileName: `Factura ${invoiceFullNumber} - ${issueData.clientName}.pdf`,
+      method: 'Transferencia',
+      hasInvoice: true,
+      paid: false, // EMITIDA PERO PENDIENTE DE COBRO
+    };
+
+    // Optimistic update
+    setInvoices([newInvoice, ...invoices]);
+
+    // Guardar en Supabase
+    try {
+      await fetch('/api/invoices', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newInvoice),
+      });
+    } catch (e) {
+      console.error('Error creando factura:', e);
+    }
+
+    // Abrir nueva ventana con la factura para imprimir/descargar
+    const html = generateInvoiceHTML(issueData, invoiceFullNumber, today);
+    const blob = new Blob([html], { type: 'text/html' });
+    const url = URL.createObjectURL(blob);
+    const win = window.open(url, '_blank');
+    if (win) {
+      // Esperar que cargue y abrir el diálogo de impresión
+      setTimeout(() => {
+        win.focus();
+        win.print();
+      }, 1000);
+    }
+
+    // Reset form
+    setIssueData({
+      clientName: '',
+      clientFiscalId: '',
+      clientAddress: '',
+      clientZipCode: '',
+      clientCity: '',
+      clientCountry: '',
+      concept: '',
+      units: '1',
+      pricePerUnit: '',
+      hasIVA: false,
+    });
+    setShowIssueDialog(false);
   };
 
   // Toggle "Pagado" para facturas
@@ -1169,13 +1635,24 @@ export default function Dashboard() {
                       </p>
                     </div>
                   </div>
-                  <button
-                    onClick={openInvoiceDialog}
-                    className={`bg-gradient-to-r from-${colorClass}-500 to-${colorClass}-600 hover:scale-105 text-white font-semibold py-3 px-5 rounded-xl flex items-center gap-2 transition-all shadow-lg shadow-${colorClass}-500/30`}
-                  >
-                    <Plus size={18} />
-                    <span>Añadir Factura</span>
-                  </button>
+                  <div className="flex gap-2">
+                    {isIncome && (
+                      <button
+                        onClick={() => setShowIssueDialog(true)}
+                        className="bg-gradient-to-r from-blue-500 to-indigo-600 hover:scale-105 text-white font-semibold py-3 px-5 rounded-xl flex items-center gap-2 transition-all shadow-lg shadow-blue-500/30"
+                      >
+                        <FileText size={18} />
+                        <span>Emitir Factura</span>
+                      </button>
+                    )}
+                    <button
+                      onClick={openInvoiceDialog}
+                      className={`bg-gradient-to-r from-${colorClass}-500 to-${colorClass}-600 hover:scale-105 text-white font-semibold py-3 px-5 rounded-xl flex items-center gap-2 transition-all shadow-lg shadow-${colorClass}-500/30`}
+                    >
+                      <Plus size={18} />
+                      <span>{isIncome ? 'Añadir Recibida' : 'Añadir Factura'}</span>
+                    </button>
+                  </div>
                 </div>
               </div>
 
@@ -3084,6 +3561,200 @@ export default function Dashboard() {
       })()}
 
       {/* Import Dialog */}
+      {/* Issue Invoice Dialog - Emitir nueva factura */}
+      {showIssueDialog && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50 backdrop-blur-sm overflow-y-auto">
+          <div className="bg-zinc-900 border border-blue-500/30 rounded-2xl shadow-2xl shadow-blue-500/10 max-w-2xl w-full p-8 my-8">
+            <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center gap-3">
+                <div className="bg-gradient-to-br from-blue-500 to-indigo-600 p-2.5 rounded-xl shadow-lg shadow-blue-500/20">
+                  <FileText size={20} className="text-white" />
+                </div>
+                <div>
+                  <h2 className="text-xl font-bold text-white">Emitir Nueva Factura</h2>
+                  <p className="text-xs text-zinc-500">Crear factura para enviar a cliente</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowIssueDialog(false)}
+                className="text-zinc-600 hover:text-white p-1 rounded-lg hover:bg-zinc-800 transition-all"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            {/* Info: Datos del emisor + Nº auto */}
+            <div className="bg-blue-500/5 border border-blue-500/20 rounded-lg p-4 mb-6">
+              <div className="grid grid-cols-2 gap-4 text-xs">
+                <div>
+                  <p className="text-blue-400 font-bold tracking-wider uppercase mb-1">Emisor (Tú)</p>
+                  <p className="text-white font-semibold">Miguel Ángel Ortiz Cruz</p>
+                  <p className="text-zinc-400">NIF: 49549728T</p>
+                </div>
+                <div className="text-right">
+                  <p className="text-blue-400 font-bold tracking-wider uppercase mb-1">Próximo Nº</p>
+                  <p className="text-white font-bold text-lg">{String(getNextInvoiceNumber()).padStart(3, '0')}-{new Date().getFullYear()}</p>
+                  <p className="text-zinc-400">Fecha: {new Date().toLocaleDateString('es-ES')}</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Datos del Cliente */}
+            <div className="space-y-3 mb-5">
+              <p className="text-xs text-blue-400 font-bold tracking-wider uppercase">Datos del Cliente *</p>
+
+              <input
+                type="text"
+                value={issueData.clientName}
+                onChange={(e) => setIssueData({ ...issueData, clientName: e.target.value })}
+                placeholder="Nombre o razón social del cliente *"
+                className="w-full px-4 py-2.5 border border-zinc-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-white bg-zinc-950 placeholder:text-zinc-600"
+              />
+
+              <div className="grid grid-cols-2 gap-3">
+                <input
+                  type="text"
+                  value={issueData.clientFiscalId}
+                  onChange={(e) => setIssueData({ ...issueData, clientFiscalId: e.target.value })}
+                  placeholder="NIF / Nº Fiscal"
+                  className="w-full px-4 py-2.5 border border-zinc-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-white bg-zinc-950 placeholder:text-zinc-600 text-sm"
+                />
+                <input
+                  type="text"
+                  value={issueData.clientCountry}
+                  onChange={(e) => setIssueData({ ...issueData, clientCountry: e.target.value })}
+                  placeholder="País (Ej: Andorra, Dubai)"
+                  className="w-full px-4 py-2.5 border border-zinc-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-white bg-zinc-950 placeholder:text-zinc-600 text-sm"
+                />
+              </div>
+
+              <input
+                type="text"
+                value={issueData.clientAddress}
+                onChange={(e) => setIssueData({ ...issueData, clientAddress: e.target.value })}
+                placeholder="Dirección"
+                className="w-full px-4 py-2.5 border border-zinc-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-white bg-zinc-950 placeholder:text-zinc-600 text-sm"
+              />
+
+              <div className="grid grid-cols-3 gap-3">
+                <input
+                  type="text"
+                  value={issueData.clientZipCode}
+                  onChange={(e) => setIssueData({ ...issueData, clientZipCode: e.target.value })}
+                  placeholder="C.P."
+                  className="w-full px-4 py-2.5 border border-zinc-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-white bg-zinc-950 placeholder:text-zinc-600 text-sm"
+                />
+                <input
+                  type="text"
+                  value={issueData.clientCity}
+                  onChange={(e) => setIssueData({ ...issueData, clientCity: e.target.value })}
+                  placeholder="Ciudad"
+                  className="col-span-2 w-full px-4 py-2.5 border border-zinc-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-white bg-zinc-950 placeholder:text-zinc-600 text-sm"
+                />
+              </div>
+            </div>
+
+            {/* Servicio / Concepto */}
+            <div className="space-y-3 mb-5">
+              <p className="text-xs text-blue-400 font-bold tracking-wider uppercase">Servicio Facturado *</p>
+
+              <textarea
+                value={issueData.concept}
+                onChange={(e) => setIssueData({ ...issueData, concept: e.target.value })}
+                placeholder="Ej: Automatización de mensajes, consultoría técnica, integración de WhatsApp..."
+                rows={2}
+                className="w-full px-4 py-2.5 border border-zinc-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-white bg-zinc-950 placeholder:text-zinc-600 text-sm resize-none"
+              />
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs text-zinc-400 mb-1">Unidades</label>
+                  <input
+                    type="number"
+                    value={issueData.units}
+                    onChange={(e) => setIssueData({ ...issueData, units: e.target.value })}
+                    placeholder="1"
+                    className="w-full px-4 py-2.5 border border-zinc-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-white bg-zinc-950 text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-zinc-400 mb-1">Precio Unitario *</label>
+                  <div className="relative">
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={issueData.pricePerUnit}
+                      onChange={(e) => setIssueData({ ...issueData, pricePerUnit: e.target.value })}
+                      placeholder="170.00"
+                      className="w-full px-4 py-2.5 pr-8 border border-zinc-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-white bg-zinc-950 text-sm"
+                    />
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 text-sm">€</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Toggle IVA */}
+            <label className="flex items-center justify-between p-3 bg-zinc-950 border border-zinc-800 rounded-lg cursor-pointer hover:border-amber-500/30 transition-all mb-4">
+              <div className="flex items-center gap-3">
+                <Percent size={16} className="text-amber-400" />
+                <div>
+                  <p className="text-sm font-semibold text-white">¿Aplicar IVA 21%?</p>
+                  <p className="text-[10px] text-zinc-500">{issueData.hasIVA ? 'Cliente en España' : 'Cliente extracomunitario (Andorra, Dubai...)'}</p>
+                </div>
+              </div>
+              <input
+                type="checkbox"
+                checked={issueData.hasIVA}
+                onChange={(e) => setIssueData({ ...issueData, hasIVA: e.target.checked })}
+                className="sr-only peer"
+              />
+              <div className={`w-10 h-5 rounded-full transition-all relative ${issueData.hasIVA ? 'bg-amber-500' : 'bg-zinc-700'}`}>
+                <div className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white transition-all ${issueData.hasIVA ? 'translate-x-5' : ''}`}></div>
+              </div>
+            </label>
+
+            {/* Preview Total */}
+            {issueData.pricePerUnit && (
+              <div className="bg-gradient-to-br from-blue-500/10 to-zinc-900 border border-blue-500/20 rounded-lg p-4 mb-5">
+                <div className="grid grid-cols-3 gap-3 text-center">
+                  <div>
+                    <p className="text-[10px] text-zinc-500 uppercase tracking-wider">Base</p>
+                    <p className="text-sm font-bold text-white">{((parseFloat(issueData.units) || 1) * (parseFloat(issueData.pricePerUnit) || 0)).toFixed(2)}€</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] text-zinc-500 uppercase tracking-wider">IVA</p>
+                    <p className="text-sm font-bold text-amber-400">{issueData.hasIVA ? (((parseFloat(issueData.units) || 1) * (parseFloat(issueData.pricePerUnit) || 0)) * 0.21).toFixed(2) : '0.00'}€</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] text-zinc-500 uppercase tracking-wider">Total</p>
+                    <p className="text-base font-bold text-emerald-400">
+                      {(((parseFloat(issueData.units) || 1) * (parseFloat(issueData.pricePerUnit) || 0)) * (issueData.hasIVA ? 1.21 : 1)).toFixed(2)}€
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Botones */}
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowIssueDialog(false)}
+                className="flex-1 px-4 py-2.5 border border-zinc-700 rounded-lg text-zinc-300 font-semibold hover:bg-zinc-800 transition-all"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleIssueInvoice}
+                className="flex-1 px-4 py-2.5 bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700 text-white rounded-lg font-semibold transition-all shadow-lg shadow-blue-500/20"
+              >
+                ✨ Emitir y Descargar PDF
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {showImportDialog && (
         <div className="fixed inset-0 bg-black bg-opacity-30 flex items-center justify-center p-4 z-50 backdrop-blur-sm">
           <div className="bg-zinc-900 border border-zinc-800 rounded-xl shadow-2xl max-w-md w-full p-8">
