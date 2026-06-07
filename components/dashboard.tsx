@@ -128,12 +128,7 @@ export default function Dashboard() {
   // Estado para emitir nuevas facturas
   const [showIssueDialog, setShowIssueDialog] = useState(false);
   const [issueData, setIssueData] = useState({
-    clientName: '',
-    clientFiscalId: '',
-    clientAddress: '',
-    clientZipCode: '',
-    clientCity: '',
-    clientCountry: '',
+    clientBlock: '',  // Bloque de texto con TODOS los datos del cliente
     concept: '',
     units: '1',
     pricePerUnit: '',
@@ -540,6 +535,17 @@ export default function Dashboard() {
     return maxNumber + 1;
   };
 
+  // Parser inteligente del bloque del cliente
+  // Devuelve { name: primera línea, htmlLines: HTML con todas las líneas restantes }
+  const parseClientBlock = (block: string) => {
+    const lines = block.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+    if (lines.length === 0) return { name: 'Cliente', htmlLines: '' };
+    const name = lines[0];
+    const restLines = lines.slice(1);
+    const htmlLines = restLines.map(l => `<div>${l}</div>`).join('');
+    return { name, htmlLines };
+  };
+
   // Genera el HTML moderno de la factura emitida
   const generateInvoiceHTML = (data: typeof issueData, invoiceNumber: string, date: string) => {
     const units = parseFloat(data.units) || 1;
@@ -550,6 +556,7 @@ export default function Dashboard() {
     const formatEUR = (n: number) => `${n.toFixed(2).replace('.', ',')} €`;
 
     const dateFormatted = new Date(date).toLocaleDateString('es-ES', { day: '2-digit', month: 'long', year: 'numeric' });
+    const clientInfo = parseClientBlock(data.clientBlock);
 
     return `<!DOCTYPE html>
 <html lang="es">
@@ -816,7 +823,6 @@ export default function Dashboard() {
   <header class="hero">
     <div class="hero-grid">
       <div>
-        <span class="brand-tag">Autónomo · Servicios Digitales</span>
         <h1 class="brand">Miguel Ángel Ortiz Cruz</h1>
         <div class="brand-info">
           NIF: 49549728T<br>
@@ -829,19 +835,15 @@ export default function Dashboard() {
         <div class="invoice-label">Factura</div>
         <div class="invoice-number">Nº ${invoiceNumber}</div>
         <div class="invoice-date">${dateFormatted}</div>
-        <div class="invoice-status">⏳ Pendiente de pago</div>
       </div>
     </div>
   </header>
   <main class="body">
     <div class="client-card">
       <div class="section-label">Facturar a</div>
-      <div class="client-name">${data.clientName}</div>
+      <div class="client-name">${clientInfo.name}</div>
       <div class="client-info">
-        ${data.clientFiscalId ? `Nº Fiscal: ${data.clientFiscalId}<br>` : ''}
-        ${data.clientAddress ? `${data.clientAddress}<br>` : ''}
-        ${[data.clientZipCode, data.clientCity].filter(Boolean).join(' ')}<br>
-        ${data.clientCountry || ''}
+        ${clientInfo.htmlLines}
       </div>
     </div>
 
@@ -901,10 +903,12 @@ export default function Dashboard() {
 
   // Emitir nueva factura: guarda en Supabase como pendiente y abre PDF en nueva ventana
   const handleIssueInvoice = async () => {
-    if (!issueData.clientName || !issueData.concept || !issueData.pricePerUnit) {
-      alert('Por favor completa: Cliente, Concepto y Precio');
+    if (!issueData.clientBlock.trim() || !issueData.concept || !issueData.pricePerUnit) {
+      alert('Por favor completa: Datos del Cliente, Concepto y Precio');
       return;
     }
+
+    const clientInfo = parseClientBlock(issueData.clientBlock);
 
     const units = parseFloat(issueData.units) || 1;
     const pricePerUnit = parseFloat(issueData.pricePerUnit);
@@ -923,13 +927,13 @@ export default function Dashboard() {
       type: 'income',
       category: 'work',
       number: String(nextNumber),
-      company: issueData.clientName,
+      company: clientInfo.name,
       description: issueData.concept,
       amount: total,
       amountWithoutVAT: subtotal,
       vat: iva,
       date: today,
-      fileName: `Factura ${invoiceFullNumber} - ${issueData.clientName}.pdf`,
+      fileName: `Factura ${invoiceFullNumber} - ${clientInfo.name}.pdf`,
       method: 'Transferencia',
       hasInvoice: true,
       paid: false, // EMITIDA PERO PENDIENTE DE COBRO
@@ -964,12 +968,7 @@ export default function Dashboard() {
 
     // Reset form
     setIssueData({
-      clientName: '',
-      clientFiscalId: '',
-      clientAddress: '',
-      clientZipCode: '',
-      clientCity: '',
-      clientCountry: '',
+      clientBlock: '',
       concept: '',
       units: '1',
       pricePerUnit: '',
@@ -3599,59 +3598,21 @@ export default function Dashboard() {
               </div>
             </div>
 
-            {/* Datos del Cliente */}
-            <div className="space-y-3 mb-5">
-              <p className="text-xs text-blue-400 font-bold tracking-wider uppercase">Datos del Cliente *</p>
-
-              <input
-                type="text"
-                value={issueData.clientName}
-                onChange={(e) => setIssueData({ ...issueData, clientName: e.target.value })}
-                placeholder="Nombre o razón social del cliente *"
-                className="w-full px-4 py-2.5 border border-zinc-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-white bg-zinc-950 placeholder:text-zinc-600"
-              />
-
-              <div className="grid grid-cols-2 gap-3">
-                <input
-                  type="text"
-                  value={issueData.clientFiscalId}
-                  onChange={(e) => setIssueData({ ...issueData, clientFiscalId: e.target.value })}
-                  placeholder="NIF / Nº Fiscal"
-                  className="w-full px-4 py-2.5 border border-zinc-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-white bg-zinc-950 placeholder:text-zinc-600 text-sm"
-                />
-                <input
-                  type="text"
-                  value={issueData.clientCountry}
-                  onChange={(e) => setIssueData({ ...issueData, clientCountry: e.target.value })}
-                  placeholder="País (Ej: Andorra, Dubai)"
-                  className="w-full px-4 py-2.5 border border-zinc-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-white bg-zinc-950 placeholder:text-zinc-600 text-sm"
-                />
+            {/* Datos del Cliente - Un solo bloque */}
+            <div className="space-y-2 mb-5">
+              <div className="flex items-center justify-between">
+                <p className="text-xs text-blue-400 font-bold tracking-wider uppercase">Datos del Cliente *</p>
+                <p className="text-[10px] text-zinc-500">Pega o escribe todo el bloque, líneas separadas</p>
               </div>
 
-              <input
-                type="text"
-                value={issueData.clientAddress}
-                onChange={(e) => setIssueData({ ...issueData, clientAddress: e.target.value })}
-                placeholder="Dirección"
-                className="w-full px-4 py-2.5 border border-zinc-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-white bg-zinc-950 placeholder:text-zinc-600 text-sm"
+              <textarea
+                value={issueData.clientBlock}
+                onChange={(e) => setIssueData({ ...issueData, clientBlock: e.target.value })}
+                placeholder={`Ejemplo:\n\nBUSSINESYT FZE\nNº Fiscal: 4531\nBLOCK B Office B23-092 SRTI PARK\nSharjah\nDubái`}
+                rows={6}
+                className="w-full px-4 py-3 border border-zinc-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-white bg-zinc-950 placeholder:text-zinc-600 text-sm font-mono resize-none"
               />
-
-              <div className="grid grid-cols-3 gap-3">
-                <input
-                  type="text"
-                  value={issueData.clientZipCode}
-                  onChange={(e) => setIssueData({ ...issueData, clientZipCode: e.target.value })}
-                  placeholder="C.P."
-                  className="w-full px-4 py-2.5 border border-zinc-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-white bg-zinc-950 placeholder:text-zinc-600 text-sm"
-                />
-                <input
-                  type="text"
-                  value={issueData.clientCity}
-                  onChange={(e) => setIssueData({ ...issueData, clientCity: e.target.value })}
-                  placeholder="Ciudad"
-                  className="col-span-2 w-full px-4 py-2.5 border border-zinc-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-white bg-zinc-950 placeholder:text-zinc-600 text-sm"
-                />
-              </div>
+              <p className="text-[10px] text-zinc-500 italic">💡 La primera línea será el nombre principal del cliente. El resto se mostrará tal cual en la factura.</p>
             </div>
 
             {/* Servicio / Concepto */}
