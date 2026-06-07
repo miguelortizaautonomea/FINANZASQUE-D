@@ -563,7 +563,7 @@ export default function Dashboard() {
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Factura ${invoiceNumber} - ${data.clientName}</title>
+<title>Factura ${invoiceNumber} - ${clientInfo.name}</title>
 <style>
   @page { size: A4; margin: 0; }
   * { margin: 0; padding: 0; box-sizing: border-box; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
