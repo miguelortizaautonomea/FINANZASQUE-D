@@ -69,7 +69,47 @@ const METHODS = ['Tarjeta', 'Efectivo', 'Transferencia', 'Bizum', 'PayPal', 'Otr
 
 type ViewType = 'dashboard' | 'transactions' | 'accounting' | 'invoices-income' | 'invoices-expense' | 'subscriptions' | 'categories' | 'settings';
 
+// Credenciales de acceso
+const AUTH_EMAIL = 'miguel.ortiz@autonomea.com';
+const AUTH_PASSWORD = '2714';
+
 export default function Dashboard() {
+  // Estado de autenticación
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [authChecked, setAuthChecked] = useState(false);
+  const [loginEmail, setLoginEmail] = useState('');
+  const [loginPassword, setLoginPassword] = useState('');
+  const [loginError, setLoginError] = useState('');
+
+  // Verificar sesión guardada al cargar
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('finanzapp_auth');
+      if (saved === 'authenticated') {
+        setIsAuthenticated(true);
+      }
+      setAuthChecked(true);
+    }
+  }, []);
+
+  const handleLogin = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (loginEmail.toLowerCase().trim() === AUTH_EMAIL && loginPassword === AUTH_PASSWORD) {
+      localStorage.setItem('finanzapp_auth', 'authenticated');
+      setIsAuthenticated(true);
+      setLoginError('');
+      setLoginEmail('');
+      setLoginPassword('');
+    } else {
+      setLoginError('Email o contraseña incorrectos');
+    }
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem('finanzapp_auth');
+    setIsAuthenticated(false);
+  };
+
   const [activeView, setActiveView] = useState<ViewType>('dashboard');
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [loading, setLoading] = useState(true);
@@ -1263,6 +1303,15 @@ export default function Dashboard() {
               <div className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white transition-all ${theme === 'light' ? 'translate-x-4' : ''}`}></div>
             </div>
           </button>
+
+          {/* Logout */}
+          <button
+            onClick={handleLogout}
+            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-zinc-400 hover:bg-rose-500/10 hover:text-rose-400 transition-all group border border-transparent hover:border-rose-500/20 mt-2"
+          >
+            <X size={18} className="text-zinc-500 group-hover:text-rose-400" />
+            <span className="font-medium text-sm">Cerrar Sesión</span>
+          </button>
         </div>
       </aside>
     );
@@ -1468,6 +1517,99 @@ export default function Dashboard() {
       </div>
     </div>
   );
+
+  // Pantalla de carga mientras verifica la sesión
+  if (!authChecked) {
+    return (
+      <div className="min-h-screen bg-zinc-950 flex items-center justify-center">
+        <div className="text-white text-sm">Cargando...</div>
+      </div>
+    );
+  }
+
+  // Pantalla de Login si NO autenticado
+  if (!isAuthenticated) {
+    return (
+      <div className="min-h-screen bg-zinc-950 flex items-center justify-center p-4 relative overflow-hidden">
+        {/* Background effects */}
+        <div className="absolute top-0 right-0 w-96 h-96 bg-emerald-500/10 rounded-full -mr-48 -mt-48 blur-3xl"></div>
+        <div className="absolute bottom-0 left-0 w-96 h-96 bg-blue-500/10 rounded-full -ml-48 -mb-48 blur-3xl"></div>
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-violet-500/5 rounded-full blur-3xl"></div>
+
+        <div className="relative w-full max-w-md">
+          {/* Logo */}
+          <div className="text-center mb-8">
+            <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-2xl shadow-lg shadow-emerald-500/30 mb-4">
+              <DollarSign size={32} className="text-white" />
+            </div>
+            <h1 className="text-3xl font-bold text-white tracking-tight">FinanzApp</h1>
+            <p className="text-xs text-emerald-400 font-semibold tracking-widest uppercase mt-1">Pro · Acceso Restringido</p>
+          </div>
+
+          {/* Form */}
+          <form
+            onSubmit={handleLogin}
+            className="bg-gradient-to-br from-zinc-900 to-zinc-900/50 border border-zinc-800 rounded-2xl p-8 shadow-2xl shadow-emerald-500/5 backdrop-blur-xl"
+          >
+            <h2 className="text-lg font-bold text-white mb-1">Iniciar Sesión</h2>
+            <p className="text-xs text-zinc-500 mb-6">Introduce tus credenciales para acceder</p>
+
+            {/* Email */}
+            <div className="mb-4">
+              <label className="block text-xs font-bold text-zinc-400 mb-2 tracking-wider uppercase">Email</label>
+              <input
+                type="email"
+                value={loginEmail}
+                onChange={(e) => setLoginEmail(e.target.value)}
+                placeholder="tu@email.com"
+                autoComplete="username"
+                className="w-full px-4 py-3 border border-zinc-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 text-white bg-zinc-950 placeholder:text-zinc-600 text-sm"
+                required
+              />
+            </div>
+
+            {/* Password */}
+            <div className="mb-5">
+              <label className="block text-xs font-bold text-zinc-400 mb-2 tracking-wider uppercase">Contraseña</label>
+              <input
+                type="password"
+                value={loginPassword}
+                onChange={(e) => setLoginPassword(e.target.value)}
+                placeholder="••••"
+                autoComplete="current-password"
+                className="w-full px-4 py-3 border border-zinc-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 text-white bg-zinc-950 placeholder:text-zinc-600 text-sm"
+                required
+              />
+            </div>
+
+            {/* Error message */}
+            {loginError && (
+              <div className="mb-4 bg-rose-500/10 border border-rose-500/30 rounded-lg p-3">
+                <p className="text-xs text-rose-400 font-semibold flex items-center gap-2">
+                  <AlertCircle size={14} />
+                  {loginError}
+                </p>
+              </div>
+            )}
+
+            {/* Submit */}
+            <button
+              type="submit"
+              className="w-full bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white font-semibold py-3 px-4 rounded-lg transition-all shadow-lg shadow-emerald-500/30 hover:scale-[1.02]"
+            >
+              ✨ Acceder al Panel
+            </button>
+
+            {/* Footer */}
+            <p className="text-[10px] text-zinc-600 text-center mt-6 leading-relaxed">
+              Tu sesión se mantendrá activa en este navegador.<br />
+              Para mayor seguridad, cierra sesión al terminar.
+            </p>
+          </form>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className={`min-h-screen transition-colors ${theme === 'dark' ? 'bg-zinc-950' : 'bg-zinc-100'}`} data-theme={theme}>
