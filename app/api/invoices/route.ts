@@ -23,8 +23,9 @@ function mapFromDB(row: any) {
 }
 
 // Mapear de frontend a DB
+// Solo incluimos pdf_url si tiene valor (para tolerar BBDDs sin esta columna aún)
 function mapToDB(invoice: any) {
-  return {
+  const base: any = {
     id: invoice.id,
     type: invoice.type,
     category: invoice.category,
@@ -39,8 +40,9 @@ function mapToDB(invoice: any) {
     method: invoice.method,
     has_invoice: invoice.hasInvoice || false,
     paid: invoice.paid || false,
-    pdf_url: invoice.pdfUrl || null,
   };
+  if (invoice.pdfUrl) base.pdf_url = invoice.pdfUrl;
+  return base;
 }
 
 // GET - Obtener todas las facturas
