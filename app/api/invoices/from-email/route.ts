@@ -301,11 +301,43 @@ export async function POST(req: NextRequest) {
       ? ` (convertido de ${originalAmount?.toFixed(2)} ${originalCurrency})`
       : '';
 
+    // 🚀 Subir PDF a Google Drive vía webhook de n8n (fire-and-forget)
+    const driveWebhook = process.env.DRIVE_WEBHOOK_EXPENSES;
+    if (driveWebhook) {
+      try {
+        const monthMap: Record<string, string> = {
+          '01': 'Ene', '02': 'Feb', '03': 'Mar', '04': 'Abr',
+          '05': 'May', '06': 'Jun', '07': 'Jul', '08': 'Ago',
+          '09': 'Sep', '10': 'Oct', '11': 'Nov', '12': 'Dic'
+        };
+        const month = monthMap[date.slice(5, 7)] || 'Sin';
+        const cleanCompany = company.replace(/[^a-zA-Z0-9\s\-]/g, '').trim().substring(0, 50);
+        const driveFileName = `${month}-${invoiceNumber || 'X'}-${cleanCompany}.pdf`;
+
+        const driveFormData = new FormData();
+        const pdfBlob = new Blob([buffer], { type: 'application/pdf' });
+        driveFormData.append('data', pdfBlob, driveFileName);
+        driveFormData.append('fileName', driveFileName);
+        driveFormData.append('company', company);
+        driveFormData.append('amount', total.toFixed(2));
+        driveFormData.append('month', month);
+
+        // Fire-and-forget (no esperamos respuesta)
+        fetch(driveWebhook, {
+          method: 'POST',
+          body: driveFormData,
+        }).catch(err => console.error('Drive upload error:', err));
+      } catch (driveErr) {
+        console.error('Error preparing Drive upload:', driveErr);
+      }
+    }
+
     return NextResponse.json({
       success: true,
       invoice: newInvoice,
       currency: { original: originalCurrency, converted: 'EUR', originalAmount, finalAmount: total },
-      message: `✅ Factura "${company}" añadida: ${total.toFixed(2)}€${conversionMsg}`
+      message: `✅ Factura "${company}" añadida: ${total.toFixed(2)}€${conversionMsg}`,
+      driveUpload: driveWebhook ? 'queued' : 'disabled'
     });
   } catch (error: any) {
     console.error('Error procesando email PDF:', error);
