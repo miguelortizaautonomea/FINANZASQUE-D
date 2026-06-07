@@ -70,14 +70,43 @@ function extractDescription(text: string): string | null {
   return null;
 }
 
-function extractAmount(text: string): { total: number | null; base: number | null; vat: number | null; ivaPercent: number } {
+// Detección de moneda y tasa de cambio a EUR
+function detectCurrency(text: string): { currency: 'EUR' | 'USD' | 'GBP' | 'AED'; rateToEUR: number } {
+  const upperText = text.toUpperCase();
+
+  // Indicadores claros de moneda (palabras explícitas tienen prioridad)
+  const usdHints = /\bUSD\b|\$\s*\d|US\s*\$|U\.S\.\s*Dollar|Dollar/i.test(text);
+  const eurHints = /\bEUR\b|€\s*\d|\d\s*€|Euro/i.test(text);
+  const gbpHints = /\bGBP\b|£\s*\d|Pound/i.test(text);
+  const aedHints = /\bAED\b|Dirham|UAE/i.test(text);
+
+  // Prioridad: AED > GBP > USD > EUR (orden de menor a mayor probabilidad)
+  if (aedHints) return { currency: 'AED', rateToEUR: 0.25 };  // 1 AED ≈ 0.25 EUR
+  if (gbpHints && !eurHints) return { currency: 'GBP', rateToEUR: 1.17 }; // 1 GBP ≈ 1.17 EUR
+  if (usdHints && !eurHints) return { currency: 'USD', rateToEUR: 1 / 1.15 }; // 1 USD ≈ 0.87 EUR
+  return { currency: 'EUR', rateToEUR: 1 }; // Default
+}
+
+function extractAmount(text: string): {
+  total: number | null;
+  base: number | null;
+  vat: number | null;
+  ivaPercent: number;
+  originalCurrency: 'EUR' | 'USD' | 'GBP' | 'AED';
+  originalAmount: number | null;
+} {
   let total: number | null = null;
   let base: number | null = null;
   let vat: number | null = null;
 
+  // Detectar moneda
+  const { currency, rateToEUR } = detectCurrency(text);
+
   const totalPatterns = [
     /total\s*(?:factura|a\s*pagar|importe|due|charged|paid)?\s*[:\s]*[€$£]?\s*([\d.,]+)\s*[€$£]?/gi,
     /TOTAL[:\s]+[€$£]?\s*([\d.,]+)\s*[€$£]?/gi,
+    /AED\s*([\d.,]+)/gi,
+    /grand\s*total[:\s]+[€$£]?\s*([\d.,]+)/gi,
   ];
 
   let maxFound = 0;
@@ -92,12 +121,23 @@ function extractAmount(text: string): { total: number | null; base: number | nul
   }
   if (maxFound > 0) total = maxFound;
 
+  // Guardar el monto original antes de convertir
+  const originalAmount = total;
+
+  // Convertir a EUR si no es EUR
+  if (total !== null && currency !== 'EUR') {
+    total = total * rateToEUR;
+  }
+
   const basePatterns = [/base\s*imponible[:\s]*€?\s*([\d.,]+)/gi, /subtotal[:\s]*€?\s*([\d.,]+)/gi];
   for (const p of basePatterns) {
     const m = text.match(p);
     if (m) {
       const a = parseFloat(m[1].replace(/\./g, '').replace(',', '.'));
-      if (!isNaN(a) && a > 0) { base = a; break; }
+      if (!isNaN(a) && a > 0) {
+        base = currency !== 'EUR' ? a * rateToEUR : a;
+        break;
+      }
     }
   }
 
@@ -112,7 +152,7 @@ function extractAmount(text: string): { total: number | null; base: number | nul
     if (total !== null) { base = total; vat = 0; }
   }
 
-  return { total, base, vat, ivaPercent };
+  return { total, base, vat, ivaPercent, originalCurrency: currency, originalAmount };
 }
 
 function extractDate(text: string): string {
@@ -206,8 +246,8 @@ export async function POST(req: NextRequest) {
       if (senderMatch) company = senderMatch[1].trim();
     }
 
-    const description = extractDescription(text) || subject || null;
-    const { total, base, vat, ivaPercent } = extractAmount(text);
+    let description = extractDescription(text) || subject || null;
+    const { total, base, vat, ivaPercent, originalCurrency, originalAmount } = extractAmount(text);
     const date = extractDate(text);
 
     if (!total) {
@@ -216,6 +256,12 @@ export async function POST(req: NextRequest) {
         success: false,
         analyzed: { invoiceNumber, company, description, text: text.substring(0, 300) }
       }, { status: 400 });
+    }
+
+    // Si hubo conversión de moneda, añadir nota a la descripción
+    if (originalCurrency !== 'EUR' && originalAmount !== null) {
+      const conversionNote = `[Original: ${originalAmount.toFixed(2)} ${originalCurrency} → ${total.toFixed(2)} EUR]`;
+      description = description ? `${description} ${conversionNote}` : conversionNote;
     }
 
     // Crear el invoice
@@ -251,10 +297,15 @@ export async function POST(req: NextRequest) {
       }, { status: 500 });
     }
 
+    const conversionMsg = originalCurrency !== 'EUR'
+      ? ` (convertido de ${originalAmount?.toFixed(2)} ${originalCurrency})`
+      : '';
+
     return NextResponse.json({
       success: true,
       invoice: newInvoice,
-      message: `✅ Factura "${company}" añadida: ${total.toFixed(2)}€`
+      currency: { original: originalCurrency, converted: 'EUR', originalAmount, finalAmount: total },
+      message: `✅ Factura "${company}" añadida: ${total.toFixed(2)}€${conversionMsg}`
     });
   } catch (error: any) {
     console.error('Error procesando email PDF:', error);
