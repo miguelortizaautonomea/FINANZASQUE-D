@@ -18,6 +18,7 @@ function mapFromDB(row: any) {
     method: row.method,
     hasInvoice: row.has_invoice,
     paid: row.paid || false,
+    pdfUrl: row.pdf_url || null,
   };
 }
 
@@ -38,6 +39,7 @@ function mapToDB(invoice: any) {
     method: invoice.method,
     has_invoice: invoice.hasInvoice || false,
     paid: invoice.paid || false,
+    pdf_url: invoice.pdfUrl || null,
   };
 }
 

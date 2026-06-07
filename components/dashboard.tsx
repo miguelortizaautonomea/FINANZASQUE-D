@@ -62,6 +62,7 @@ interface Invoice {
   method: string;
   hasInvoice?: boolean; // Si tiene factura → cuenta en contabilidad
   paid?: boolean;       // Si está pagada o no
+  pdfUrl?: string | null; // URL pública del PDF en Supabase Storage
 }
 
 const CATEGORIES = ['comidas', 'caballo', 'deporte', 'work', 'ocio', 'caprichos', 'viajes', 'campo', 'regalos', 'coche', 'desayuno'];
@@ -476,7 +477,43 @@ export default function Dashboard() {
       console.error('Error creating invoice:', e);
     }
 
-    // 🚀 Si es un gasto con PDF REAL adjunto (no el dummy), subir a Google Drive
+    // 📤 SIEMPRE: Si hay PDF REAL adjunto (no el dummy), subir a Supabase Storage
+    if (selectedFile && selectedFile.size > 0) {
+      try {
+        // Generar nombre estandarizado
+        const monthMap: Record<string, string> = {
+          '01': 'Ene', '02': 'Feb', '03': 'Mar', '04': 'Abr',
+          '05': 'May', '06': 'Jun', '07': 'Jul', '08': 'Ago',
+          '09': 'Sep', '10': 'Oct', '11': 'Nov', '12': 'Dic'
+        };
+        const monthShort = monthMap[newInvoice.date.slice(5, 7)] || 'Sin';
+        const cleanCompany = companyFinal.replace(/[^a-zA-Z0-9\s\-]/g, '').trim().substring(0, 50);
+        const pdfFileName = `${monthShort}-${newInvoice.number || 'X'}-${cleanCompany}.pdf`;
+
+        const uploadFormData = new FormData();
+        uploadFormData.append('file', selectedFile, pdfFileName);
+        uploadFormData.append('fileName', pdfFileName);
+        uploadFormData.append('invoiceId', newInvoice.id);
+
+        const uploadResponse = await fetch('/api/upload-pdf', {
+          method: 'POST',
+          body: uploadFormData,
+        });
+        const uploadResult = await uploadResponse.json();
+        if (uploadResult.success && uploadResult.url) {
+          console.log('✅ PDF guardado:', uploadResult.url);
+          // Actualizar el invoice en memoria con la URL
+          newInvoice.pdfUrl = uploadResult.url;
+          setInvoices(prev => prev.map(i => i.id === newInvoice.id ? { ...i, pdfUrl: uploadResult.url } : i));
+        } else {
+          console.error('Error subiendo PDF:', uploadResult.error);
+        }
+      } catch (uploadErr) {
+        console.error('Error en upload PDF:', uploadErr);
+      }
+    }
+
+    // 🚀 OPCIONAL: También subir a Google Drive vía n8n webhook (si está configurado)
     const driveWebhook = process.env.NEXT_PUBLIC_DRIVE_WEBHOOK_EXPENSES;
     if (type === 'expense' && selectedFile && selectedFile.size > 0 && driveWebhook) {
       try {
@@ -2034,6 +2071,17 @@ export default function Dashboard() {
                               )}
                               <td className="py-3 px-3 text-center">
                                 <div className="flex items-center justify-center gap-1">
+                                  {inv.pdfUrl && (
+                                    <a
+                                      href={inv.pdfUrl}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="text-emerald-500 hover:text-emerald-400 hover:bg-emerald-500/10 p-2 rounded-lg transition-all"
+                                      title="Ver PDF"
+                                    >
+                                      📎
+                                    </a>
+                                  )}
                                   <button
                                     onClick={() => startEditInvoice(inv)}
                                     className="text-blue-500 hover:text-blue-400 hover:bg-blue-500/10 p-2 rounded-lg transition-all"
@@ -3093,6 +3141,17 @@ export default function Dashboard() {
                       </td>
                       <td className="py-4 px-6 text-center">
                         <div className="flex items-center justify-center gap-2">
+                          {invoice.pdfUrl && (
+                            <a
+                              href={invoice.pdfUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-emerald-500 hover:text-emerald-400 hover:bg-emerald-500/10 p-2 rounded-lg transition-all"
+                              title="Ver PDF"
+                            >
+                              📎
+                            </a>
+                          )}
                           <button
                             onClick={() => startEditInvoice(invoice)}
                             className="text-blue-500 hover:text-blue-400 hover:bg-blue-500/10 p-2 rounded-lg transition-all"

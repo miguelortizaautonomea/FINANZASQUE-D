@@ -21,5 +21,6 @@ export interface InvoiceDB {
   method: string;
   has_invoice: boolean;
   paid?: boolean;
+  pdf_url?: string;
   created_at?: string;
 }

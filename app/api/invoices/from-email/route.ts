@@ -190,6 +190,7 @@ function mapToDB(invoice: any) {
     method: invoice.method,
     has_invoice: invoice.hasInvoice || false,
     paid: invoice.paid || false,
+    pdf_url: invoice.pdfUrl || null,
   };
 }
 
@@ -281,6 +282,39 @@ export async function POST(req: NextRequest) {
       hasInvoice: true,
       paid: type === 'expense', // Gastos vienen ya pagados, ingresos vienen pendientes
     };
+
+    // 📤 SIEMPRE: Subir PDF a Supabase Storage
+    let pdfUrl: string | null = null;
+    try {
+      const monthMap: Record<string, string> = {
+        '01': 'Ene', '02': 'Feb', '03': 'Mar', '04': 'Abr',
+        '05': 'May', '06': 'Jun', '07': 'Jul', '08': 'Ago',
+        '09': 'Sep', '10': 'Oct', '11': 'Nov', '12': 'Dic'
+      };
+      const monthShort = monthMap[date.slice(5, 7)] || 'Sin';
+      const cleanCompany = company.replace(/[^a-zA-Z0-9\s\-]/g, '').trim().substring(0, 50);
+      const storageFileName = `${monthShort}-${invoiceNumber || 'X'}-${cleanCompany}-${Date.now()}.pdf`;
+      const storagePath = `invoices/${storageFileName}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from('invoice-pdfs')
+        .upload(storagePath, buffer, {
+          contentType: 'application/pdf',
+          upsert: true,
+        });
+
+      if (!uploadError) {
+        const { data: urlData } = supabase.storage.from('invoice-pdfs').getPublicUrl(storagePath);
+        pdfUrl = urlData.publicUrl;
+      } else {
+        console.error('Storage upload error:', uploadError);
+      }
+    } catch (storageErr) {
+      console.error('Error uploading to storage:', storageErr);
+    }
+
+    // Añadir pdfUrl al invoice antes de guardar en DB
+    (newInvoice as any).pdfUrl = pdfUrl;
 
     // Guardar en Supabase
     const { data, error } = await supabase
