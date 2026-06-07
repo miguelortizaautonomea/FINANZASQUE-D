@@ -476,6 +476,39 @@ export default function Dashboard() {
       console.error('Error creating invoice:', e);
     }
 
+    // 🚀 Si es un gasto con PDF REAL adjunto (no el dummy), subir a Google Drive
+    const driveWebhook = process.env.NEXT_PUBLIC_DRIVE_WEBHOOK_EXPENSES;
+    if (type === 'expense' && selectedFile && selectedFile.size > 0 && driveWebhook) {
+      try {
+        const monthMap: Record<string, string> = {
+          '01': 'Ene', '02': 'Feb', '03': 'Mar', '04': 'Abr',
+          '05': 'May', '06': 'Jun', '07': 'Jul', '08': 'Ago',
+          '09': 'Sep', '10': 'Oct', '11': 'Nov', '12': 'Dic'
+        };
+        const monthShort = monthMap[newInvoice.date.slice(5, 7)] || 'Sin';
+        const cleanCompany = companyFinal.replace(/[^a-zA-Z0-9\s\-]/g, '').trim().substring(0, 50);
+        const driveFileName = `${monthShort}-${newInvoice.number || 'X'}-${cleanCompany}.pdf`;
+
+        const driveFormData = new FormData();
+        driveFormData.append('data', selectedFile, driveFileName);
+        driveFormData.append('fileName', driveFileName);
+        driveFormData.append('company', companyFinal);
+        driveFormData.append('amount', amount.toFixed(2));
+        driveFormData.append('month', monthShort);
+
+        fetch(driveWebhook, {
+          method: 'POST',
+          body: driveFormData,
+        }).then(() => {
+          console.log('✅ PDF subido a Drive');
+        }).catch(err => {
+          console.error('Drive upload error:', err);
+        });
+      } catch (driveErr) {
+        console.error('Error preparing Drive upload:', driveErr);
+      }
+    }
+
     setFormData({
       number: '',
       company: '',
