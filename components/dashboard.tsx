@@ -367,9 +367,13 @@ export default function Dashboard() {
   }, [chartFilteredInvoices]);
 
   const handleAddInvoice = async (type: 'income' | 'expense') => {
-    // PDF es OPCIONAL - solo requiere descripción y monto
-    if (!formData.company || !formData.amount) {
-      alert('Por favor completa al menos: Descripción y Monto');
+    // PDF es OPCIONAL - solo requiere Monto + (Empresa o Descripción)
+    if (!formData.amount) {
+      alert('Por favor introduce el Monto');
+      return;
+    }
+    if (!formData.company && !formData.description) {
+      alert('Por favor introduce al menos Empresa o Descripción');
       return;
     }
 
@@ -387,13 +391,16 @@ export default function Dashboard() {
       vat = amount - amountWithoutVAT;
     }
 
+    // Si solo introdujo Descripción pero no Empresa, usar la Descripción como Empresa
+    const companyFinal = formData.company || formData.description || 'Sin nombre';
+
     const newInvoice: Invoice = {
       id: Date.now().toString(),
       type,
       // Los ingresos siempre son categoría 'work' (facturas de trabajo)
       category: type === 'income' ? 'work' : formData.category,
       number: formData.number || `MAN-${Date.now()}`,
-      company: formData.company,
+      company: companyFinal,
       description: formData.description || undefined,
       amount,
       amountWithoutVAT,
@@ -548,8 +555,12 @@ export default function Dashboard() {
   };
 
   const saveEditInvoice = async () => {
-    if (!editingId || !formData.company || !formData.amount) {
-      alert('Por favor completa al menos descripción y monto');
+    if (!editingId || !formData.amount) {
+      alert('Por favor introduce el Monto');
+      return;
+    }
+    if (!formData.company && !formData.description) {
+      alert('Por favor introduce al menos Empresa o Descripción');
       return;
     }
 
@@ -573,7 +584,8 @@ export default function Dashboard() {
     const finalInvoice = {
       ...updatedInvoice,
       number: formData.number,
-      company: formData.company,
+      // Si solo introdujo Descripción pero no Empresa, usar la Descripción como Empresa
+      company: formData.company || formData.description || 'Sin nombre',
       description: formData.description || undefined,
       amount,
       amountWithoutVAT,
