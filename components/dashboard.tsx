@@ -2362,8 +2362,9 @@ export default function Dashboard() {
                         {invoicesList.map((inv, idx) => {
                           const base = inv.amountWithoutVAT > 0 ? inv.amountWithoutVAT : inv.amount / 1.21;
                           const iva = inv.vat > 0 ? inv.vat : inv.amount - base;
+                          const isPendingIncome = isIncome && !inv.paid;
                           return (
-                            <tr key={inv.id} className={`border-b border-zinc-800/50 hover:bg-zinc-800/30 transition-colors ${idx % 2 === 0 ? 'bg-zinc-900/50' : 'bg-zinc-900/20'}`}>
+                            <tr key={inv.id} className={`border-b border-zinc-800/50 hover:bg-zinc-800/30 transition-colors ${isPendingIncome ? 'bg-amber-500/20' : (idx % 2 === 0 ? 'bg-zinc-900/50' : 'bg-zinc-900/20')}`}>
                               <td className="py-3 px-3 text-center">
                                 <span className="inline-flex items-center justify-center min-w-[2.5rem] h-7 px-2 bg-zinc-800 border border-zinc-700 rounded text-xs font-bold text-white">
                                   {inv.number || '-'}
