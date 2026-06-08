@@ -512,6 +512,7 @@ export default function Dashboard() {
       { display: 'Slack', aliases: ['slack'] },
       { display: 'Stripe', aliases: ['stripe'] },
       { display: 'Wernells', aliases: ['wernells'] },
+      { display: 'MillionVerifier', aliases: ['millionverifier', 'million verifier', 'million verified'] },
     ];
 
     // Agrupar facturas
