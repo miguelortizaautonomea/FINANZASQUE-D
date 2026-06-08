@@ -25,6 +25,7 @@ import {
   FileText,
   CheckCircle,
   AlertCircle,
+  AlertTriangle,
   RefreshCw,
   Sun,
   Moon,
@@ -82,12 +83,36 @@ export default function Dashboard() {
   const [loginPassword, setLoginPassword] = useState('');
   const [loginError, setLoginError] = useState('');
 
+  // Toast para notificaciones
+  const [toastMessage, setToastMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
+
+  // Modal de confirmación para borrado
+  const [deleteConfirm, setDeleteConfirm] = useState<{ id: string; description: string } | null>(null);
+
+  // Mostrar toast por 3 segundos
+  const showToast = (text: string, type: 'success' | 'error' = 'success') => {
+    setToastMessage({ text, type });
+    setTimeout(() => setToastMessage(null), 3000);
+  };
+
+  // Sesión con expiración (30 días)
+  const SESSION_DURATION = 30 * 24 * 60 * 60 * 1000; // 30 días en ms
+
   // Verificar sesión guardada al cargar
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('finanzapp_auth');
-      if (saved === 'authenticated') {
-        setIsAuthenticated(true);
+      const timestamp = localStorage.getItem('finanzapp_auth_time');
+      if (saved === 'authenticated' && timestamp) {
+        const elapsed = Date.now() - parseInt(timestamp);
+        if (elapsed < SESSION_DURATION) {
+          setIsAuthenticated(true);
+        } else {
+          // Sesión expirada
+          localStorage.removeItem('finanzapp_auth');
+          localStorage.removeItem('finanzapp_auth_time');
+          setIsAuthenticated(false);
+        }
       }
       setAuthChecked(true);
     }
@@ -97,6 +122,7 @@ export default function Dashboard() {
     e.preventDefault();
     if (loginEmail.toLowerCase().trim() === AUTH_EMAIL && loginPassword === AUTH_PASSWORD) {
       localStorage.setItem('finanzapp_auth', 'authenticated');
+      localStorage.setItem('finanzapp_auth_time', Date.now().toString()); // Guardar timestamp
       setIsAuthenticated(true);
       setLoginError('');
       setLoginEmail('');
@@ -108,6 +134,7 @@ export default function Dashboard() {
 
   const handleLogout = () => {
     localStorage.removeItem('finanzapp_auth');
+    localStorage.removeItem('finanzapp_auth_time');
     setIsAuthenticated(false);
   };
 
@@ -143,6 +170,23 @@ export default function Dashboard() {
   const lastDayOfMonth = _tableRange.lastDay;
   const [dateFrom, setDateFrom] = useState<string>(firstDayOfMonth);
   const [dateTo, setDateTo] = useState<string>(lastDayOfMonth);
+
+  // Validar y actualizar fechas con validación
+  const setDateFromSafe = (newDate: string) => {
+    if (newDate && dateTo && newDate > dateTo) {
+      showToast('❌ La fecha inicial no puede ser posterior a la final', 'error');
+      return;
+    }
+    setDateFrom(newDate);
+  };
+
+  const setDateToSafe = (newDate: string) => {
+    if (newDate && dateFrom && newDate < dateFrom) {
+      showToast('❌ La fecha final no puede ser anterior a la inicial', 'error');
+      return;
+    }
+    setDateTo(newDate);
+  };
   const [filterType, setFilterType] = useState<'all' | 'income' | 'expense'>('all');
   const [filterCategory, setFilterCategory] = useState<string>('all');
   const [searchText, setSearchText] = useState<string>('');
@@ -181,6 +225,7 @@ export default function Dashboard() {
   const [importMessage, setImportMessage] = useState<string>('');
   const [analyzingPDF, setAnalyzingPDF] = useState(false);
   const [pdfAnalysisError, setPdfAnalysisError] = useState<string>('');
+  const [isSaving, setIsSaving] = useState(false);
   const [formData, setFormData] = useState({
     number: '',       // Número de factura
     company: '',      // Empresa
@@ -210,7 +255,18 @@ export default function Dashboard() {
       const result = await response.json();
 
       if (!response.ok || result.error) {
-        throw new Error(result.error || 'Error al analizar el PDF');
+        // Mensaje más amigable para PDFs escaneados o muy pequeños
+        let errorMsg = result.error || 'Error al analizar el PDF';
+
+        if (result.error?.includes('PDF escaneado') || result.error?.includes('muy pequeño')) {
+          errorMsg = '📄 PDF pequeño detectado - Completa los datos manualmente a continuación';
+        }
+
+        setPdfAnalysisError(errorMsg);
+        // Aceptar el archivo de todas formas para que el usuario pueda llenar manualmente
+        setSelectedFile(file);
+        showToast('ℹ️ ' + errorMsg, 'error');
+        return;
       }
 
       const data = result.data;
@@ -228,8 +284,13 @@ export default function Dashboard() {
 
       // Activar el toggle "Tiene factura" automáticamente
       setSelectedFile(file);
+      showToast('✅ PDF analizado correctamente', 'success');
     } catch (error: any) {
-      setPdfAnalysisError(error.message || 'No se pudo analizar el PDF');
+      // Error de red o parsing
+      const errorMsg = error.message || 'Error al analizar el PDF';
+      setPdfAnalysisError(errorMsg);
+      setSelectedFile(file); // Aceptar archivo para entrada manual
+      showToast('⚠️ ' + errorMsg, 'error');
     } finally {
       setAnalyzingPDF(false);
     }
@@ -243,9 +304,12 @@ export default function Dashboard() {
       const data = await response.json();
       if (data.invoices) {
         setInvoices(data.invoices);
+      } else if (data.error) {
+        showToast('❌ Error: ' + data.error, 'error');
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error loading invoices:', error);
+      showToast('❌ Error al cargar facturas. Revisa tu conexión.', 'error');
     } finally {
       setLoading(false);
       setTimeout(() => setRefreshing(false), 500);
@@ -417,29 +481,135 @@ export default function Dashboard() {
       .sort((a, b) => b.value - a.value);
   }, [chartFilteredInvoices]);
 
+  // Cálculo de suscripciones con useMemo para actualizarse automáticamente
+  const subscriptionData = useMemo(() => {
+    const currentYear = new Date().getFullYear();
+    const minDate = `${currentYear}-04-01`;
+    const expenseInvoices = invoices.filter(i =>
+      i.type === 'expense' &&
+      i.hasInvoice === true &&
+      i.date >= minDate
+    );
+
+    const months = ['01', '02', '03', '04', '05', '06', '07', '08', '09', '10', '11', '12'];
+    const monthNames = {
+      '01': 'Enero', '02': 'Febrero', '03': 'Marzo', '04': 'Abril',
+      '05': 'Mayo', '06': 'Junio', '07': 'Julio', '08': 'Agosto',
+      '09': 'Septiembre', '10': 'Octubre', '11': 'Noviembre', '12': 'Diciembre'
+    };
+
+    // Proveedores fijos
+    const PROVIDERS = [
+      { display: 'ChatGPT', aliases: ['chatgpt', 'openai'] },
+      { display: 'N8N', aliases: ['n8n', 'railway'] },
+      { display: 'Verificado Meta', aliases: ['verificado meta', 'meta verified', 'meta'] },
+      { display: 'GHL Agency', aliases: ['ghl', 'gohighlevel', 'high level', 'highlevel'] },
+      { display: 'Loom', aliases: ['loom'] },
+      { display: 'Google Workspace', aliases: ['google workspace', 'g.workspace', 'gworkspace', 'workspace'] },
+      { display: 'Smartlead', aliases: ['smartlead'] },
+      { display: 'Mailerlite', aliases: ['mailerlite', 'mailer lite'] },
+      { display: 'Claude', aliases: ['claude', 'anthropic'] },
+      { display: 'Slack', aliases: ['slack'] },
+      { display: 'Stripe', aliases: ['stripe'] },
+      { display: 'Wernells', aliases: ['wernells'] },
+    ];
+
+    // Agrupar facturas
+    const grouped: Record<string, Record<string, { total: number; count: number; invoices: Invoice[] }>> = {};
+    for (const p of PROVIDERS) {
+      grouped[p.display] = {};
+    }
+
+    for (const inv of expenseInvoices) {
+      const companyLower = inv.company.toLowerCase();
+      const month = inv.date.slice(5, 7);
+      if (!months.includes(month)) continue;
+
+      for (const p of PROVIDERS) {
+        if (p.aliases.some(a => companyLower.includes(a))) {
+          if (!grouped[p.display][month]) grouped[p.display][month] = { total: 0, count: 0, invoices: [] };
+          grouped[p.display][month].total += inv.amount;
+          grouped[p.display][month].count += 1;
+          grouped[p.display][month].invoices.push(inv);
+          break;
+        }
+      }
+    }
+
+    const companies = PROVIDERS.map(p => p.display);
+    const recurrent = companies.filter(c => Object.keys(grouped[c]).length >= 2);
+
+    const monthTotals: Record<string, number> = {};
+    for (const m of months) {
+      monthTotals[m] = expenseInvoices
+        .filter(i => i.date.slice(5, 7) === m)
+        .reduce((s, i) => s + i.amount, 0);
+    }
+
+    const currentMonth = String(new Date().getMonth() + 1).padStart(2, '0');
+
+    return {
+      expenseInvoices,
+      months,
+      monthNames,
+      grouped,
+      companies,
+      recurrent,
+      monthTotals,
+      currentMonth,
+    };
+  }, [invoices]);
+
   const handleAddInvoice = async (type: 'income' | 'expense') => {
-    // PDF es OPCIONAL - solo requiere Monto + (Empresa o Descripción)
-    if (!formData.amount) {
-      alert('Por favor introduce el Monto');
+    // Prevenir múltiples clics
+    if (isSaving) {
+      showToast('⏳ Por favor espera, la factura se está guardando...', 'error');
       return;
     }
-    if (!formData.company && !formData.description) {
-      alert('Por favor introduce al menos Empresa o Descripción');
+
+    // Validación: Monto requerido
+    if (!formData.amount || formData.amount.trim() === '') {
+      showToast('❌ Por favor introduce el Monto', 'error');
       return;
     }
 
     const amount = parseFloat(formData.amount);
+    // Validar que sea un número válido y positivo
+    if (isNaN(amount) || amount <= 0) {
+      showToast('❌ El Monto debe ser un número positivo', 'error');
+      return;
+    }
+
+    // Validación: Empresa o Descripción requerida
+    if (!formData.company && !formData.description) {
+      showToast('❌ Por favor introduce al menos Empresa o Descripción', 'error');
+      return;
+    }
+
+    // Validación: Fecha válida
+    if (!formData.date) {
+      showToast('❌ Por favor selecciona una Fecha', 'error');
+      return;
+    }
+
+    setIsSaving(true);
+
     const hasInvoice = !!selectedFile;
 
     // Si tiene factura → calcular IVA basado en el porcentaje seleccionado
-    // El monto introducido es el total (con IVA), así que separamos
     let amountWithoutVAT = amount;
     let vat = 0;
 
     if (hasInvoice) {
-      const ivaPercent = parseFloat(formData.ivaPercent || '21');
-      amountWithoutVAT = amount / (1 + ivaPercent / 100);
-      vat = amount - amountWithoutVAT;
+      const ivaPercent = parseFloat(formData.ivaPercent || '0');
+      if (ivaPercent < 0 || ivaPercent > 100) {
+        showToast('❌ El IVA debe estar entre 0 y 100%', 'error');
+        setIsSaving(false);
+        return;
+      }
+      // Prevenir división por cero: Si ivaPercent es 0, los cálculos siguen siendo válidos
+      amountWithoutVAT = ivaPercent > 0 ? amount / (1 + ivaPercent / 100) : amount;
+      vat = ivaPercent > 0 ? Math.round((amount - amountWithoutVAT) * 100) / 100 : 0; // Redondear a 2 decimales
     }
 
     // Si solo introdujo Descripción pero no Empresa, usar la Descripción como Empresa
@@ -457,8 +627,8 @@ export default function Dashboard() {
     const newInvoice: Invoice = {
       id: Date.now().toString(),
       type,
-      // Los ingresos siempre son categoría 'work' (facturas de trabajo)
-      category: type === 'income' ? 'work' : formData.category,
+      // Los ingresos y gastos siempre son categoría 'work' (facturas de trabajo)
+      category: type === 'income' || type === 'expense' ? 'work' : formData.category,
       number: finalNumber,
       company: companyFinal,
       description: formData.description || undefined,
@@ -467,8 +637,8 @@ export default function Dashboard() {
       vat,
       date: formData.date,
       fileName: selectedFile?.name || 'manual',
-      // Los ingresos siempre son por 'Transferencia'
-      method: type === 'income' ? 'Transferencia' : formData.method,
+      // Los ingresos y gastos siempre son por 'Transferencia'
+      method: type === 'income' || type === 'expense' ? 'Transferencia' : formData.method,
       hasInvoice,
     };
 
@@ -477,18 +647,40 @@ export default function Dashboard() {
 
     // Persistir en Supabase
     try {
-      await fetch('/api/invoices', {
+      const res = await fetch('/api/invoices', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(newInvoice),
       });
-    } catch (e) {
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || 'Error desconocido');
+      }
+      showToast('✅ Factura añadida correctamente', 'success');
+    } catch (e: any) {
       console.error('Error creating invoice:', e);
+      // Deshacer optimistic update
+      setInvoices(invoices);
+      showToast('❌ Error al guardar: ' + (e.message || 'Intenta de nuevo'), 'error');
+      setIsSaving(false);
+      return;
     }
 
     // 📤 SIEMPRE: Si hay PDF REAL adjunto (no el dummy), subir a Supabase Storage
     if (selectedFile && selectedFile.size > 0) {
       try {
+        // Validar PDF antes de subir
+        if (!selectedFile.type.includes('pdf')) {
+          showToast('❌ El archivo debe ser un PDF', 'error');
+          setIsSaving(false);
+          return;
+        }
+        if (selectedFile.size > 10 * 1024 * 1024) { // 10MB máximo
+          showToast('❌ El PDF no puede pesar más de 10MB', 'error');
+          setIsSaving(false);
+          return;
+        }
+
         // Generar nombre estandarizado
         const monthMap: Record<string, string> = {
           '01': 'Ene', '02': 'Feb', '03': 'Mar', '04': 'Abr',
@@ -510,15 +702,15 @@ export default function Dashboard() {
         });
         const uploadResult = await uploadResponse.json();
         if (uploadResult.success && uploadResult.url) {
-          console.log('✅ PDF guardado:', uploadResult.url);
           // Actualizar el invoice en memoria con la URL
           newInvoice.pdfUrl = uploadResult.url;
           setInvoices(prev => prev.map(i => i.id === newInvoice.id ? { ...i, pdfUrl: uploadResult.url } : i));
         } else {
-          console.error('Error subiendo PDF:', uploadResult.error);
+          showToast('⚠️ Factura guardada pero PDF no se subió: ' + (uploadResult.error || 'Error desconocido'), 'error');
         }
-      } catch (uploadErr) {
+      } catch (uploadErr: any) {
         console.error('Error en upload PDF:', uploadErr);
+        showToast('⚠️ Factura guardada pero error en PDF: ' + (uploadErr.message || 'Intenta de nuevo'), 'error');
       }
     }
 
@@ -549,24 +741,14 @@ export default function Dashboard() {
       }
     }
 
-    setFormData({
-      number: '',
-      company: '',
-      amount: '',
-      amountWithoutVAT: '',
-      description: '',
-      category: CATEGORIES[0],
-      date: new Date().toISOString().split('T')[0],
-      method: METHODS[0],
-      ivaPercent: '21',
-    });
-    setSelectedFile(null);
-
+    // Limpiar formulario y cerrar diálogo
+    resetFormData(type);
     if (type === 'income') {
       setShowIncomeDialog(false);
     } else {
       setShowExpenseDialog(false);
     }
+    setIsSaving(false);
   };
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -606,15 +788,99 @@ export default function Dashboard() {
     }
   };
 
+  // Mostrar modal de confirmación para borrado
   const deleteInvoice = async (id: string) => {
+    const invoice = invoices.find(i => i.id === id);
+    if (!invoice) return;
+    setDeleteConfirm({
+      id,
+      description: `${invoice.number} - ${invoice.company} por €${invoice.amount.toFixed(2)}`
+    });
+  };
+
+  // Confirmar borrado (después de modal)
+  const confirmDelete = async () => {
+    if (!deleteConfirm) return;
+    const id = deleteConfirm.id;
+
     // Optimistic update
     setInvoices(invoices.filter((inv) => inv.id !== id));
+    setDeleteConfirm(null);
+
     // Persistir en Supabase
     try {
-      await fetch(`/api/invoices?id=${id}`, { method: 'DELETE' });
-    } catch (e) {
-      console.error('Error deleting:', e);
+      const res = await fetch(`/api/invoices?id=${id}`, { method: 'DELETE' });
+      if (!res.ok) throw new Error('Error al eliminar');
+      showToast('✅ Factura eliminada correctamente', 'success');
+    } catch (e: any) {
+      // Deshacer optimistic update si falla
+      await loadInvoices();
+      showToast('❌ Error al eliminar: ' + (e.message || 'Intenta de nuevo'), 'error');
     }
+  };
+
+  // Función para resetear el formulario con valores por defecto según tipo
+  const resetFormData = (type: 'income' | 'expense') => {
+    // Establecer valores por defecto según tipo
+    let defaultCategory = CATEGORIES[0];
+    let defaultMethod = METHODS[0];
+
+    // Para gastos: SIEMPRE work y Transferencia
+    if (type === 'expense') {
+      defaultCategory = 'work';
+      defaultMethod = 'Transferencia';
+    }
+
+    setFormData({
+      number: '',
+      company: '',
+      amount: '',
+      amountWithoutVAT: '',
+      description: '',
+      category: defaultCategory,
+      date: new Date().toISOString().split('T')[0],
+      method: defaultMethod,
+      ivaPercent: '21',
+    });
+    setSelectedFile(null);
+    setPdfAnalysisError('');
+  };
+
+  // Funciones para abrir diálogos con formulario reiniciado
+  const openIncomeDialog = () => {
+    // Establecer valores por defecto ANTES de abrir
+    setFormData({
+      number: '',
+      company: '',
+      amount: '',
+      amountWithoutVAT: '',
+      description: '',
+      category: CATEGORIES[0],
+      date: new Date().toISOString().split('T')[0],
+      method: METHODS[0],
+      ivaPercent: '21',
+    });
+    setSelectedFile(null);
+    setPdfAnalysisError('');
+    setShowIncomeDialog(true);
+  };
+
+  const openExpenseDialog = () => {
+    // Establecer valores por defecto ANTES de abrir - IMPORTANTE para gastos: work + Transferencia
+    setFormData({
+      number: '',
+      company: '',
+      amount: '',
+      amountWithoutVAT: '',
+      description: '',
+      category: 'work', // ← SIEMPRE work para gastos
+      date: new Date().toISOString().split('T')[0],
+      method: 'Transferencia', // ← SIEMPRE Transferencia para gastos
+      ivaPercent: '21',
+    });
+    setSelectedFile(null);
+    setPdfAnalysisError('');
+    setShowExpenseDialog(true);
   };
 
   const toggleInvoice = async (id: string) => {
@@ -1796,14 +2062,14 @@ export default function Dashboard() {
                   Importar CSV
                 </button>
                 <button
-                  onClick={() => setShowIncomeDialog(true)}
+                  onClick={() => openIncomeDialog()}
                   className="bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white font-medium py-2 px-4 rounded-lg flex items-center gap-2 transition-all text-sm shadow-lg shadow-emerald-500/20"
                 >
                   <TrendingUp size={16} />
                   Ingreso
                 </button>
                 <button
-                  onClick={() => setShowExpenseDialog(true)}
+                  onClick={() => openExpenseDialog()}
                   className="bg-gradient-to-r from-rose-500 to-pink-600 hover:from-rose-600 hover:to-pink-700 text-white font-medium py-2 px-4 rounded-lg flex items-center gap-2 transition-all text-sm shadow-lg shadow-rose-500/20"
                 >
                   <TrendingDown size={16} />
@@ -1843,11 +2109,37 @@ export default function Dashboard() {
             .sort((a, b) => {
               switch (invoiceSortBy) {
                 case 'number-asc': {
+                  // Para gastos: ordena por mes + número usando la FECHA (más robusto)
+                  if (!isIncome) {
+                    const monthA = parseInt(a.date.slice(5, 7)); // Mes de la fecha
+                    const monthB = parseInt(b.date.slice(5, 7));
+                    const numA = parseInt(a.number) || 0;
+                    const numB = parseInt(b.number) || 0;
+
+                    // Primero por mes, luego por número (ambos ascendentes)
+                    if (monthA !== monthB) return monthA - monthB;
+                    return numA - numB;
+                  }
+
+                  // Para ingresos: ordena por número simple
                   const numA = parseInt(a.number) || 0;
                   const numB = parseInt(b.number) || 0;
                   return numA - numB;
                 }
                 case 'number-desc': {
+                  // Para gastos: ordena por mes (DESC) + número (DESC) usando la FECHA
+                  if (!isIncome) {
+                    const monthA = parseInt(a.date.slice(5, 7)); // Mes de la fecha
+                    const monthB = parseInt(b.date.slice(5, 7));
+                    const numA = parseInt(a.number) || 0;
+                    const numB = parseInt(b.number) || 0;
+
+                    // Primero por mes DESC, luego por número DESC (últimas primero)
+                    if (monthA !== monthB) return monthB - monthA;
+                    return numB - numA;
+                  }
+
+                  // Para ingresos: ordena por número simple
                   const numA = parseInt(a.number) || 0;
                   const numB = parseInt(b.number) || 0;
                   return numB - numA;
@@ -1865,9 +2157,9 @@ export default function Dashboard() {
           const openInvoiceDialog = () => {
             setSelectedFile(new File([], 'manual')); // Activar toggle de factura
             if (isIncome) {
-              setShowIncomeDialog(true);
+              openIncomeDialog();
             } else {
-              setShowExpenseDialog(true);
+              openExpenseDialog();
             }
           };
 
@@ -2010,9 +2302,9 @@ export default function Dashboard() {
                             ? `bg-gradient-to-r from-${colorClass}-500 to-${isIncome ? 'teal' : 'pink'}-600 text-white shadow-md`
                             : 'text-zinc-400 hover:text-white'
                         }`}
-                        title="Número ascendente (12, 13, 14...)"
+                        title={isIncome ? "Número ascendente (1, 2, 3...)" : "Por mes antiguo primero"}
                       >
-                        Nº ↑
+                        {isIncome ? 'Nº Asc' : 'Mes Asc'}
                       </button>
                       <button
                         onClick={() => setInvoiceSortBy('number-desc')}
@@ -2021,9 +2313,9 @@ export default function Dashboard() {
                             ? `bg-gradient-to-r from-${colorClass}-500 to-${isIncome ? 'teal' : 'pink'}-600 text-white shadow-md`
                             : 'text-zinc-400 hover:text-white'
                         }`}
-                        title="Número descendente (24, 23, 22...)"
+                        title={isIncome ? "Número descendente (24, 23, 22...)" : "Por mes reciente primero"}
                       >
-                        Nº ↓
+                        {isIncome ? 'Nº Desc' : 'Mes Desc'}
                       </button>
                       <button
                         onClick={() => setInvoiceSortBy('date-asc')}
@@ -2161,75 +2453,16 @@ export default function Dashboard() {
 
         {/* VISTA DE SUSCRIPCIONES MENSUALES */}
         {activeView === 'subscriptions' && (() => {
-          // Solo gastos con factura desde Abril
-          const currentYear = new Date().getFullYear();
-          const minDate = `${currentYear}-04-01`;
-          const expenseInvoices = invoices.filter(i =>
-            i.type === 'expense' &&
-            i.hasInvoice === true &&
-            i.date >= minDate
-          );
-
-          const months = ['04', '05', '06', '07'];
-          const monthNames = { '04': 'Abril', '05': 'Mayo', '06': 'Junio', '07': 'Julio' };
-
-          // Proveedores fijos con sus aliases para matching
-          const PROVIDERS = [
-            { display: 'ChatGPT', aliases: ['chatgpt', 'openai'] },
-            { display: 'N8N', aliases: ['n8n'] },
-            { display: 'Verificado Meta', aliases: ['verificado meta', 'meta verified', 'meta'] },
-            { display: 'GHL Agency', aliases: ['ghl', 'gohighlevel', 'high level', 'highlevel'] },
-            { display: 'Loom', aliases: ['loom'] },
-            { display: 'Google Workspace', aliases: ['google workspace', 'g.workspace', 'gworkspace', 'workspace'] },
-            { display: 'Smartlead', aliases: ['smartlead'] },
-            { display: 'Mailerlite', aliases: ['mailerlite', 'mailer lite'] },
-            { display: 'Claude', aliases: ['claude', 'anthropic'] },
-            { display: 'Slack', aliases: ['slack'] },
-            { display: 'Stripe', aliases: ['stripe'] },
-          ];
-
-          // Agrupar facturas por proveedor predefinido y mes
-          // Devuelve: { providerDisplay: { '04': { total, count, invoices }, ... } }
-          const grouped: Record<string, Record<string, { total: number; count: number; invoices: Invoice[] }>> = {};
-
-          // Inicializar
-          for (const p of PROVIDERS) {
-            grouped[p.display] = {};
-          }
-
-          for (const inv of expenseInvoices) {
-            const companyLower = inv.company.toLowerCase();
-            const month = inv.date.slice(5, 7);
-            if (!months.includes(month)) continue;
-
-            // Buscar a qué proveedor predefinido pertenece
-            for (const p of PROVIDERS) {
-              if (p.aliases.some(a => companyLower.includes(a))) {
-                if (!grouped[p.display][month]) grouped[p.display][month] = { total: 0, count: 0, invoices: [] };
-                grouped[p.display][month].total += inv.amount;
-                grouped[p.display][month].count += 1;
-                grouped[p.display][month].invoices.push(inv);
-                break;
-              }
-            }
-          }
-
-          // Lista de proveedores (mantener orden definido)
-          const companies = PROVIDERS.map(p => p.display);
-
-          // Detectar suscripciones recurrentes (presentes en 2+ meses)
-          const recurrent = companies.filter(c => Object.keys(grouped[c]).length >= 2);
-
-          // Calcular totales por mes
-          const monthTotals: Record<string, number> = {};
-          for (const m of months) {
-            monthTotals[m] = expenseInvoices
-              .filter(i => i.date.slice(5, 7) === m)
-              .reduce((s, i) => s + i.amount, 0);
-          }
-
-          // Detectar mes actual para destacar
-          const currentMonth = String(new Date().getMonth() + 1).padStart(2, '0');
+          const {
+            expenseInvoices,
+            months,
+            monthNames,
+            grouped,
+            companies,
+            recurrent,
+            monthTotals,
+            currentMonth,
+          } = subscriptionData;
 
           return (
             <div className="space-y-6">
@@ -2252,7 +2485,7 @@ export default function Dashboard() {
               </div>
 
               {/* Resumen por mes */}
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
                 {months.map(m => {
                   const isCurrentMonth = m === currentMonth;
                   return (
@@ -2921,14 +3154,14 @@ export default function Dashboard() {
                 Importar CSV
               </button>
               <button
-                onClick={() => setShowIncomeDialog(true)}
+                onClick={() => openIncomeDialog()}
                 className="bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white font-medium py-2 px-4 rounded-lg flex items-center gap-2 transition-all text-sm shadow-lg shadow-emerald-500/20"
               >
                 <TrendingUp size={16} />
                 Ingreso
               </button>
               <button
-                onClick={() => setShowExpenseDialog(true)}
+                onClick={() => openExpenseDialog()}
                 className="bg-gradient-to-r from-rose-500 to-pink-600 hover:from-rose-600 hover:to-pink-700 text-white font-medium py-2 px-4 rounded-lg flex items-center gap-2 transition-all text-sm shadow-lg shadow-rose-500/20"
               >
                 <TrendingDown size={16} />
@@ -2996,7 +3229,7 @@ export default function Dashboard() {
               <input
                 type="date"
                 value={dateFrom}
-                onChange={(e) => setDateFrom(e.target.value)}
+                onChange={(e) => setDateFromSafe(e.target.value)}
                 className="w-full px-4 py-2 border border-zinc-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 text-white bg-zinc-950"
               />
             </div>
@@ -3007,7 +3240,7 @@ export default function Dashboard() {
               <input
                 type="date"
                 value={dateTo}
-                onChange={(e) => setDateTo(e.target.value)}
+                onChange={(e) => setDateToSafe(e.target.value)}
                 className="w-full px-4 py-2 border border-zinc-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 text-white bg-zinc-950"
               />
             </div>
@@ -3080,14 +3313,14 @@ export default function Dashboard() {
             </div>
             <div className="flex gap-3">
               <button
-                onClick={() => setShowIncomeDialog(true)}
+                onClick={() => openIncomeDialog()}
                 className="bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white font-semibold py-2.5 px-5 rounded-lg flex items-center gap-2 transition-all shadow-lg shadow-emerald-500/20 hover:scale-[1.02]"
               >
                 <TrendingUp size={18} />
                 <span>Ingreso</span>
               </button>
               <button
-                onClick={() => setShowExpenseDialog(true)}
+                onClick={() => openExpenseDialog()}
                 className="bg-gradient-to-r from-rose-500 to-pink-600 hover:from-rose-600 hover:to-pink-700 text-white font-semibold py-2.5 px-5 rounded-lg flex items-center gap-2 transition-all shadow-lg shadow-rose-500/20 hover:scale-[1.02]"
               >
                 <TrendingDown size={18} />
@@ -3421,9 +3654,14 @@ export default function Dashboard() {
                 </button>
                 <button
                   onClick={() => handleAddInvoice('income')}
-                  className="flex-1 px-4 py-2.5 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white rounded-lg font-semibold transition-all shadow-lg shadow-emerald-500/20"
+                  disabled={isSaving}
+                  className={`flex-1 px-4 py-2.5 rounded-lg font-semibold transition-all shadow-lg ${
+                    isSaving
+                      ? 'bg-zinc-700 text-zinc-400 cursor-not-allowed opacity-60'
+                      : 'bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white shadow-emerald-500/20'
+                  }`}
                 >
-                  Guardar
+                  {isSaving ? '⏳ Guardando...' : 'Guardar'}
                 </button>
               </div>
             </div>
@@ -3643,9 +3881,14 @@ export default function Dashboard() {
                 </button>
                 <button
                   onClick={() => handleAddInvoice('expense')}
-                  className="flex-1 px-4 py-2.5 bg-gradient-to-r from-rose-500 to-pink-600 hover:from-rose-600 hover:to-pink-700 text-white rounded-lg font-semibold transition-all shadow-lg shadow-rose-500/20"
+                  disabled={isSaving}
+                  className={`flex-1 px-4 py-2.5 rounded-lg font-semibold transition-all shadow-lg ${
+                    isSaving
+                      ? 'bg-zinc-700 text-zinc-400 cursor-not-allowed opacity-60'
+                      : 'bg-gradient-to-r from-rose-500 to-pink-600 hover:from-rose-600 hover:to-pink-700 text-white shadow-rose-500/20'
+                  }`}
                 >
-                  Guardar
+                  {isSaving ? '⏳ Guardando...' : 'Guardar'}
                 </button>
               </div>
             </div>
@@ -4074,6 +4317,58 @@ export default function Dashboard() {
                 className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700"
               >
                 Listo
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Toast Notification */}
+      {toastMessage && (
+        <div className="fixed bottom-4 right-4 z-50 animate-in slide-in-from-bottom-2 duration-300">
+          <div className={`px-4 py-3 rounded-lg shadow-lg font-semibold text-white flex items-center gap-2 ${
+            toastMessage.type === 'error'
+              ? 'bg-red-500 border border-red-600'
+              : 'bg-emerald-500 border border-emerald-600'
+          }`}>
+            {toastMessage.type === 'error' ? '❌' : '✅'}
+            {toastMessage.text}
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {deleteConfirm && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50 backdrop-blur-sm">
+          <div className="bg-zinc-900 border border-zinc-800 rounded-xl shadow-2xl max-w-sm w-full p-6">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="flex-shrink-0 flex items-center justify-center h-12 w-12 rounded-full bg-red-100">
+                <AlertTriangle size={24} className="text-red-600" />
+              </div>
+              <h3 className="text-lg font-semibold text-white">Confirmar eliminación</h3>
+            </div>
+
+            <p className="text-zinc-300 text-sm mb-6">
+              ¿Estás seguro de que deseas eliminar esta factura? Esta acción no se puede deshacer.
+            </p>
+
+            <div className="bg-zinc-800 rounded-lg p-3 mb-6">
+              <p className="text-xs text-zinc-500 uppercase tracking-wider mb-1">Descripción</p>
+              <p className="text-sm text-zinc-200 font-mono">{deleteConfirm.description}</p>
+            </div>
+
+            <div className="flex gap-3">
+              <button
+                onClick={() => setDeleteConfirm(null)}
+                className="flex-1 px-4 py-2 border border-zinc-700 rounded-lg text-zinc-300 font-semibold hover:bg-zinc-800 transition-all"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={() => confirmDelete()}
+                className="flex-1 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg font-semibold transition-all"
+              >
+                Eliminar
               </button>
             </div>
           </div>

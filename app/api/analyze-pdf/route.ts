@@ -237,6 +237,7 @@ export async function POST(req: NextRequest) {
   try {
     const formData = await req.formData();
     const file = formData.get('file') as File;
+    const manualData = formData.get('manualData') ? JSON.parse(formData.get('manualData') as string) : null;
 
     if (!file) {
       return NextResponse.json({ error: 'No se subió ningún archivo' }, { status: 400 });
@@ -244,13 +245,48 @@ export async function POST(req: NextRequest) {
 
     const buffer = Buffer.from(await file.arrayBuffer());
 
-    const pdfParse: any = require('pdf-parse/lib/pdf-parse.js');
-    const pdfData = await pdfParse(buffer);
-    const text = pdfData.text;
+    // Intentar extraer texto con pdf-parse primero
+    // IMPORTANTE: Aceptar incluso PDFs pequeños (desde 100 bytes)
+    let text = '';
+    try {
+      const pdfParse: any = require('pdf-parse/lib/pdf-parse.js');
+      // Permitir PDFs muy pequeños (> 100 bytes)
+      if (buffer.length > 100) {
+        const pdfData = await pdfParse(buffer);
+        text = pdfData.text || '';
+      }
+    } catch (e: any) {
+      // Si falla por cualquier razón (corrupto, muy pequeño, etc.), ignorar y continuar
+      console.error('PDF parse error (será ignorado):', e.message);
+      text = '';
+    }
 
+    // Si no se extrajo texto (PDF escaneado o muy pequeño), permitir datos manuales
     if (!text || text.length < 10) {
+      // Si se proporcionaron datos manuales, usarlos
+      if (manualData) {
+        const analyzed: AnalyzedInvoice = {
+          invoiceNumber: manualData.invoiceNumber || null,
+          company: manualData.company || null,
+          description: manualData.description || null,
+          amount: manualData.amount ? parseFloat(manualData.amount) : null,
+          amountWithoutVAT: manualData.amountWithoutVAT ? parseFloat(manualData.amountWithoutVAT) : null,
+          vat: manualData.vat ? parseFloat(manualData.vat) : null,
+          ivaPercent: manualData.ivaPercent || 0,
+        };
+        return NextResponse.json({
+          success: true,
+          data: analyzed,
+          isManualEntry: true,
+          rawText: 'Entrada manual (PDF pequeño o escaneado)',
+        });
+      }
+
+      // Devolver error amigable que indique cómo proceder
       return NextResponse.json({
-        error: 'No se pudo extraer texto del PDF. Puede ser un PDF escaneado.'
+        error: 'No se pudo extraer texto del PDF. Parece ser un PDF escaneado o muy pequeño.',
+        suggestion: 'Por favor, completa los datos manualmente en el formulario.',
+        allowManualEntry: true
       }, { status: 400 });
     }
 
