@@ -442,8 +442,7 @@ export default function Dashboard() {
 
     const months = new Map<string, { income: number; expenses: number }>();
 
-    chartFilteredInvoices.forEach((inv) => {
-      // Compare dates as strings (YYYY-MM-DD format) for reliability
+    invoices.forEach((inv) => {
       if (inv.date >= startDateStr) {
         const monthKey = inv.date.slice(0, 7);
         if (!months.has(monthKey)) {
@@ -462,9 +461,10 @@ export default function Dashboard() {
       .sort(([a], [b]) => a.localeCompare(b))
       .map(([month, data]) => ({
         month: month.slice(5),
-        ...data,
+        income: Math.round(data.income * 100) / 100,
+        expenses: Math.round(data.expenses * 100) / 100,
       }));
-  }, [chartFilteredInvoices, trendRange]);
+  }, [invoices, trendRange]);
 
   const categoryExpenses = useMemo(() => {
     const categories = new Map<string, number>();
@@ -491,7 +491,7 @@ export default function Dashboard() {
       i.date >= minDate
     );
 
-    const months = ['01', '02', '03', '04', '05', '06', '07', '08', '09', '10', '11', '12'];
+    const months = ['04', '05', '06', '07', '08', '09', '10', '11', '12'];
     const monthNames = {
       '01': 'Enero', '02': 'Febrero', '03': 'Marzo', '04': 'Abril',
       '05': 'Mayo', '06': 'Junio', '07': 'Julio', '08': 'Agosto',
@@ -504,7 +504,6 @@ export default function Dashboard() {
       { display: 'N8N', aliases: ['n8n', 'railway'] },
       { display: 'Verificado Meta', aliases: ['verificado meta', 'meta verified', 'meta'] },
       { display: 'GHL Agency', aliases: ['ghl', 'gohighlevel', 'high level', 'highlevel'] },
-      { display: 'Loom', aliases: ['loom'] },
       { display: 'Google Workspace', aliases: ['google workspace', 'g.workspace', 'gworkspace', 'workspace'] },
       { display: 'Smartlead', aliases: ['smartlead'] },
       { display: 'Mailerlite', aliases: ['mailerlite', 'mailer lite'] },
@@ -542,9 +541,9 @@ export default function Dashboard() {
 
     const monthTotals: Record<string, number> = {};
     for (const m of months) {
-      monthTotals[m] = expenseInvoices
-        .filter(i => i.date.slice(5, 7) === m)
-        .reduce((s, i) => s + i.amount, 0);
+      monthTotals[m] = PROVIDERS.reduce((sum, p) => {
+        return sum + (grouped[p.display][m]?.total || 0);
+      }, 0);
     }
 
     const currentMonth = String(new Date().getMonth() + 1).padStart(2, '0');
@@ -3051,8 +3050,11 @@ export default function Dashboard() {
                 <LineChart data={monthlyTrend}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
                   <XAxis dataKey="month" stroke="#71717a" />
-                  <YAxis stroke="#71717a" />
-                  <Tooltip contentStyle={{ backgroundColor: '#18181b', border: '1px solid #27272a', borderRadius: '8px', color: '#fff' }} />
+                  <YAxis stroke="#71717a" tickFormatter={(v: number) => `${Math.round(v)}€`} />
+                  <Tooltip
+                    contentStyle={{ backgroundColor: '#18181b', border: '1px solid #27272a', borderRadius: '8px', color: '#fff' }}
+                    formatter={(value: any) => [`${Math.round(Number(value) * 100) / 100}€`]}
+                  />
                   <Legend />
                   <Line type="monotone" dataKey="income" stroke="#16a34a" strokeWidth={2} dot={{ fill: '#16a34a' }} name="Ingresos" />
                   <Line type="monotone" dataKey="expenses" stroke="#dc2626" strokeWidth={2} dot={{ fill: '#dc2626' }} name="Gastos" />
@@ -3780,36 +3782,45 @@ export default function Dashboard() {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-bold text-zinc-400 mb-2 tracking-wider uppercase">Monto *</label>
-                  <div className="flex gap-2">
+                  <div className="flex gap-2 items-stretch">
+                    <select
+                      value={(formData as any).currency || 'EUR'}
+                      onChange={(e) => setFormData({ ...formData, amount: '', amountWithoutVAT: '', currency: e.target.value } as any)}
+                      className="px-3 py-2.5 border border-zinc-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-rose-500 text-white bg-zinc-800 text-sm font-bold min-w-[70px]"
+                    >
+                      <option value="EUR">🇪🇺 EUR</option>
+                      <option value="USD">🇺🇸 USD</option>
+                    </select>
                     <div className="relative flex-1">
                       <input
                         type="number"
                         step="0.01"
-                        value={formData.amount}
+                        value={(formData as any).currency === 'USD' ? ((formData as any)._usdRaw || '') : formData.amount}
                         onChange={(e) => {
                           const val = e.target.value;
                           const isUSD = (formData as any).currency === 'USD';
-                          const eur = isUSD && val ? String(Math.round((parseFloat(val) / 1.15) * 100) / 100) : val;
-                          setFormData({ ...formData, amount: eur, amountWithoutVAT: eur, ...(isUSD ? { _usdRaw: val } : {}) } as any);
+                          if (isUSD) {
+                            const eur = val ? String(Math.round((parseFloat(val) / 1.15) * 100) / 100) : '';
+                            setFormData({ ...formData, amount: eur, amountWithoutVAT: eur, _usdRaw: val } as any);
+                          } else {
+                            setFormData({ ...formData, amount: val, amountWithoutVAT: val });
+                          }
                         }}
                         placeholder="0.00"
-                        className="w-full px-4 py-2.5 pr-8 border border-zinc-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-rose-500 focus:border-rose-500 text-white bg-zinc-950 placeholder:text-zinc-600"
+                        className="w-full px-4 py-2.5 pr-12 border border-zinc-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-rose-500 focus:border-rose-500 text-white bg-zinc-950 placeholder:text-zinc-600"
                       />
-                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 text-sm">€</span>
+                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 text-sm font-bold">
+                        {(formData as any).currency === 'USD' ? '$' : '€'}
+                      </span>
                     </div>
-                    <select
-                      value={(formData as any).currency || 'EUR'}
-                      onChange={(e) => setFormData({ ...formData, amount: '', amountWithoutVAT: '', currency: e.target.value } as any)}
-                      className="px-3 py-2.5 border border-zinc-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-rose-500 text-white bg-zinc-950 text-sm font-bold"
-                    >
-                      <option value="EUR">EUR</option>
-                      <option value="USD">USD</option>
-                    </select>
                   </div>
-                  {(formData as any).currency === 'USD' && formData.amount && (
-                    <p className="text-[11px] text-amber-400 mt-1">
-                      💱 {(parseFloat(formData.amount) * 1.15).toFixed(2)}$ USD → {parseFloat(formData.amount).toFixed(2)}€ (÷1.15)
-                    </p>
+                  {(formData as any).currency === 'USD' && (formData as any)._usdRaw && (
+                    <div className="mt-2 flex items-center gap-2 bg-amber-500/10 border border-amber-500/20 rounded-lg px-3 py-2">
+                      <span className="text-amber-400 text-sm font-bold">{parseFloat((formData as any)._usdRaw || 0).toFixed(2)}$</span>
+                      <span className="text-zinc-500 text-xs">÷ 1.15 =</span>
+                      <span className="text-emerald-400 text-sm font-bold">{parseFloat(formData.amount || '0').toFixed(2)}€</span>
+                      <span className="text-zinc-600 text-[10px] ml-auto">se guardará en EUR</span>
+                    </div>
                   )}
                 </div>
                 <div>
