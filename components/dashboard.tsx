@@ -445,12 +445,21 @@ export default function Dashboard() {
     // Si solo introdujo Descripción pero no Empresa, usar la Descripción como Empresa
     const companyFinal = formData.company || formData.description || 'Sin nombre';
 
+    // 🤖 AUTO-NUMERACIÓN para facturas de GASTO con factura
+    // Si es expense + hasInvoice y NO hay número específico → generar automático (ej: "1-Jun")
+    let finalNumber = formData.number;
+    if (type === 'expense' && hasInvoice && !finalNumber) {
+      finalNumber = getNextExpenseNumber(formData.date);
+    } else if (!finalNumber) {
+      finalNumber = `MAN-${Date.now()}`;
+    }
+
     const newInvoice: Invoice = {
       id: Date.now().toString(),
       type,
       // Los ingresos siempre son categoría 'work' (facturas de trabajo)
       category: type === 'income' ? 'work' : formData.category,
-      number: formData.number || `MAN-${Date.now()}`,
+      number: finalNumber,
       company: companyFinal,
       description: formData.description || undefined,
       amount,
@@ -517,21 +526,15 @@ export default function Dashboard() {
     const driveWebhook = process.env.NEXT_PUBLIC_DRIVE_WEBHOOK_EXPENSES;
     if (type === 'expense' && selectedFile && selectedFile.size > 0 && driveWebhook) {
       try {
-        const monthMap: Record<string, string> = {
-          '01': 'Ene', '02': 'Feb', '03': 'Mar', '04': 'Abr',
-          '05': 'May', '06': 'Jun', '07': 'Jul', '08': 'Ago',
-          '09': 'Sep', '10': 'Oct', '11': 'Nov', '12': 'Dic'
-        };
-        const monthShort = monthMap[newInvoice.date.slice(5, 7)] || 'Sin';
         const cleanCompany = companyFinal.replace(/[^a-zA-Z0-9\s\-]/g, '').trim().substring(0, 50);
-        const driveFileName = `${monthShort}-${newInvoice.number || 'X'}-${cleanCompany}.pdf`;
+        // Usar el número auto-generado (formato: "N-Mes-Empresa.pdf")
+        const driveFileName = `${newInvoice.number}-${cleanCompany}.pdf`;
 
         const driveFormData = new FormData();
         driveFormData.append('file', selectedFile, driveFileName);
         driveFormData.append('fileName', driveFileName);
         driveFormData.append('company', companyFinal);
         driveFormData.append('amount', amount.toFixed(2));
-        driveFormData.append('month', monthShort);
 
         fetch(driveWebhook, {
           method: 'POST',
@@ -632,17 +635,50 @@ export default function Dashboard() {
     }
   };
 
-  // Calcula el siguiente número de factura disponible
+  // Calcula el siguiente número de factura disponible (INGRESOS - emisión)
   const getNextInvoiceNumber = () => {
     const currentYear = new Date().getFullYear();
-    // Filtrar facturas de ingreso de este año que tengan número numérico
     const issuedNumbers = invoices
       .filter(i => i.type === 'income' && i.hasInvoice)
       .map(i => parseInt(i.number))
-      .filter(n => !isNaN(n) && n > 0 && n < 1000); // Solo números razonables (1-999)
+      .filter(n => !isNaN(n) && n > 0 && n < 1000);
 
     const maxNumber = issuedNumbers.length > 0 ? Math.max(...issuedNumbers) : 0;
     return maxNumber + 1;
+  };
+
+  // Auto-genera número para facturas de GASTO con formato "N-Mes"
+  // Ej: "1-Jun", "2-Jun", "3-Jun"...
+  const getNextExpenseNumber = (dateString: string): string => {
+    const dateObj = new Date(dateString);
+    const year = dateObj.getFullYear();
+    const month = dateObj.getMonth() + 1;
+    const monthMap: Record<number, string> = {
+      1: 'Ene', 2: 'Feb', 3: 'Mar', 4: 'Abr',
+      5: 'May', 6: 'Jun', 7: 'Jul', 8: 'Ago',
+      9: 'Sep', 10: 'Oct', 11: 'Nov', 12: 'Dic'
+    };
+    const monthShort = monthMap[month];
+    const monthPrefix = `${year}-${String(month).padStart(2, '0')}`;
+
+    // Buscar facturas de gasto con factura del mismo mes
+    const monthInvoices = invoices.filter(inv =>
+      inv.type === 'expense' &&
+      inv.hasInvoice &&
+      inv.date.startsWith(monthPrefix)
+    );
+
+    // Encontrar el mayor número que ya exista con formato "N-MonthShort"
+    let maxNum = 0;
+    for (const inv of monthInvoices) {
+      const match = inv.number?.match(/^(\d+)-/);
+      if (match) {
+        const num = parseInt(match[1]);
+        if (num > maxNum) maxNum = num;
+      }
+    }
+
+    return `${maxNum + 1}-${monthShort}`;
   };
 
   // Parser inteligente del bloque del cliente

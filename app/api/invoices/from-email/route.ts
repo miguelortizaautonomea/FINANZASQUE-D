@@ -173,6 +173,46 @@ function extractDate(text: string): string {
   return new Date().toISOString().split('T')[0];
 }
 
+// Auto-genera número para facturas de GASTO con formato "N-Mes"
+// Consulta Supabase para encontrar el siguiente número correlativo del mes
+async function getNextExpenseNumber(dateString: string): Promise<string> {
+  const dateObj = new Date(dateString);
+  const year = dateObj.getFullYear();
+  const month = dateObj.getMonth() + 1;
+  const monthMap: Record<number, string> = {
+    1: 'Ene', 2: 'Feb', 3: 'Mar', 4: 'Abr',
+    5: 'May', 6: 'Jun', 7: 'Jul', 8: 'Ago',
+    9: 'Sep', 10: 'Oct', 11: 'Nov', 12: 'Dic'
+  };
+  const monthShort = monthMap[month];
+  const startDate = `${year}-${String(month).padStart(2, '0')}-01`;
+  const lastDay = new Date(year, month, 0).getDate();
+  const endDate = `${year}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+
+  try {
+    const { data } = await supabase
+      .from('invoices')
+      .select('number')
+      .eq('type', 'expense')
+      .eq('has_invoice', true)
+      .gte('date', startDate)
+      .lte('date', endDate);
+
+    let maxNum = 0;
+    for (const inv of (data || [])) {
+      const match = inv.number?.match(/^(\d+)-/);
+      if (match) {
+        const num = parseInt(match[1]);
+        if (num > maxNum) maxNum = num;
+      }
+    }
+    return `${maxNum + 1}-${monthShort}`;
+  } catch (e) {
+    console.error('Error getting next expense number:', e);
+    return `${Date.now() % 1000}-${monthShort}`;
+  }
+}
+
 // Mapear de frontend a DB
 // Solo incluimos pdf_url si tiene valor (para tolerar BBDDs sin esta columna aún)
 function mapToDB(invoice: any) {
@@ -267,12 +307,21 @@ export async function POST(req: NextRequest) {
       description = description ? `${description} ${conversionNote}` : conversionNote;
     }
 
+    // 🤖 AUTO-NUMERACIÓN: para gastos generamos número correlativo del mes (ej: "1-Jun")
+    // Para ingresos mantenemos el número extraído del PDF (es el nº de factura emitida)
+    let finalNumber: string;
+    if (type === 'expense') {
+      finalNumber = await getNextExpenseNumber(date);
+    } else {
+      finalNumber = invoiceNumber || `EMAIL-${Date.now()}`;
+    }
+
     // Crear el invoice
     const newInvoice = {
       id: `email_${Date.now()}_${Math.random().toString(36).substring(7)}`,
       type,
       category: 'work',
-      number: invoiceNumber || `EMAIL-${Date.now()}`,
+      number: finalNumber,
       company,
       description,
       amount: total,
@@ -341,14 +390,9 @@ export async function POST(req: NextRequest) {
     const driveWebhook = process.env.DRIVE_WEBHOOK_EXPENSES;
     if (driveWebhook) {
       try {
-        const monthMap: Record<string, string> = {
-          '01': 'Ene', '02': 'Feb', '03': 'Mar', '04': 'Abr',
-          '05': 'May', '06': 'Jun', '07': 'Jul', '08': 'Ago',
-          '09': 'Sep', '10': 'Oct', '11': 'Nov', '12': 'Dic'
-        };
-        const month = monthMap[date.slice(5, 7)] || 'Sin';
         const cleanCompany = company.replace(/[^a-zA-Z0-9\s\-]/g, '').trim().substring(0, 50);
-        const driveFileName = `${month}-${invoiceNumber || 'X'}-${cleanCompany}.pdf`;
+        // Usar finalNumber que ya tiene formato "N-Mes" (ej: "1-Jun")
+        const driveFileName = `${finalNumber}-${cleanCompany}.pdf`;
 
         const driveFormData = new FormData();
         const pdfBlob = new Blob([buffer], { type: 'application/pdf' });
@@ -356,7 +400,6 @@ export async function POST(req: NextRequest) {
         driveFormData.append('fileName', driveFileName);
         driveFormData.append('company', company);
         driveFormData.append('amount', total.toFixed(2));
-        driveFormData.append('month', month);
 
         // Fire-and-forget (no esperamos respuesta)
         fetch(driveWebhook, {
