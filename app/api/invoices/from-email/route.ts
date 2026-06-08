@@ -352,7 +352,7 @@ export async function POST(req: NextRequest) {
 
         const driveFormData = new FormData();
         const pdfBlob = new Blob([buffer], { type: 'application/pdf' });
-        driveFormData.append('data', pdfBlob, driveFileName);
+        driveFormData.append('file', pdfBlob, driveFileName);
         driveFormData.append('fileName', driveFileName);
         driveFormData.append('company', company);
         driveFormData.append('amount', total.toFixed(2));

@@ -527,7 +527,7 @@ export default function Dashboard() {
         const driveFileName = `${monthShort}-${newInvoice.number || 'X'}-${cleanCompany}.pdf`;
 
         const driveFormData = new FormData();
-        driveFormData.append('data', selectedFile, driveFileName);
+        driveFormData.append('file', selectedFile, driveFileName);
         driveFormData.append('fileName', driveFileName);
         driveFormData.append('company', companyFinal);
         driveFormData.append('amount', amount.toFixed(2));
