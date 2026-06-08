@@ -1348,7 +1348,13 @@ export default function Dashboard() {
     const container = document.createElement('div');
     container.innerHTML = html;
     container.style.position = 'fixed';
-    container.style.top = '-9999px';
+    container.style.left = '0';
+    container.style.top = '0';
+    container.style.width = '210mm';
+    container.style.height = '297mm';
+    container.style.opacity = '0';
+    container.style.pointerEvents = 'none';
+    container.style.zIndex = '-9999';
     document.body.appendChild(container);
 
     try {
@@ -1358,9 +1364,16 @@ export default function Dashboard() {
       const pdfOptions = {
         margin: 0,
         filename: fileName,
-        image: { type: 'jpeg', quality: 0.95 },
-        html2canvas: { scale: 2, useCORS: true, backgroundColor: '#f8fafc' },
-        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+        image: { type: 'png', quality: 1 },
+        html2canvas: {
+          scale: 3,
+          useCORS: true,
+          allowTaint: true,
+          backgroundColor: '#ffffff',
+          logging: false,
+          windowWidth: 800
+        },
+        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait', compress: true },
       };
 
       // Generar el PDF como Blob
