@@ -421,39 +421,64 @@ export default function Dashboard() {
 
   const monthlyTrend = useMemo(() => {
     const today = new Date();
-    let startDateStr: string;
+    const todayStr = today.toISOString().split('T')[0];
 
-    // Calcular fecha de inicio según el rango
-    if (trendRange === 'currentMonth') {
-      // Mes actual: desde el día 1 del mes
-      startDateStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-01`;
-    } else if (trendRange === '30days') {
-      const d = new Date(today);
-      d.setDate(d.getDate() - 30);
-      startDateStr = d.toISOString().split('T')[0];
-    } else if (trendRange === '90days') {
+    // "Mes" y "30 días": agrupación diaria
+    if (trendRange === 'currentMonth' || trendRange === '30days') {
+      let startDate: Date;
+      if (trendRange === 'currentMonth') {
+        startDate = new Date(today.getFullYear(), today.getMonth(), 1);
+      } else {
+        startDate = new Date(today);
+        startDate.setDate(startDate.getDate() - 29);
+      }
+      const startDateStr = startDate.toISOString().split('T')[0];
+
+      // Pre-poblar todos los días con 0
+      const days = new Map<string, { income: number; expenses: number }>();
+      const cursor = new Date(startDate);
+      while (cursor <= today) {
+        days.set(cursor.toISOString().split('T')[0], { income: 0, expenses: 0 });
+        cursor.setDate(cursor.getDate() + 1);
+      }
+
+      invoices.forEach((inv) => {
+        if (inv.date >= startDateStr && inv.date <= todayStr && days.has(inv.date)) {
+          const d = days.get(inv.date)!;
+          if (inv.type === 'income') d.income += inv.amount;
+          else d.expenses += inv.amount;
+        }
+      });
+
+      return Array.from(days.entries())
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([date, data]) => ({
+          month: trendRange === 'currentMonth'
+            ? date.slice(8)              // "01", "02" … día del mes
+            : `${date.slice(8)}/${date.slice(5, 7)}`, // "DD/MM"
+          income: Math.round(data.income * 100) / 100,
+          expenses: Math.round(data.expenses * 100) / 100,
+        }));
+    }
+
+    // "90 días" y "Año": agrupación mensual (sin cambios)
+    let startDateStr: string;
+    if (trendRange === '90days') {
       const d = new Date(today);
       d.setDate(d.getDate() - 90);
       startDateStr = d.toISOString().split('T')[0];
     } else {
-      // YTD: desde el 1 de enero del año actual
       startDateStr = `${today.getFullYear()}-01-01`;
     }
 
     const months = new Map<string, { income: number; expenses: number }>();
-
     invoices.forEach((inv) => {
       if (inv.date >= startDateStr) {
         const monthKey = inv.date.slice(0, 7);
-        if (!months.has(monthKey)) {
-          months.set(monthKey, { income: 0, expenses: 0 });
-        }
+        if (!months.has(monthKey)) months.set(monthKey, { income: 0, expenses: 0 });
         const monthData = months.get(monthKey)!;
-        if (inv.type === 'income') {
-          monthData.income += inv.amount;
-        } else {
-          monthData.expenses += inv.amount;
-        }
+        if (inv.type === 'income') monthData.income += inv.amount;
+        else monthData.expenses += inv.amount;
       }
     });
 
