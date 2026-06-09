@@ -13,6 +13,7 @@ interface AnalyzedData {
 
 // Reutilizamos la lógica de extracción del endpoint analyze-pdf
 function extractInvoiceNumber(text: string): string | null {
+  const safeText = text || '';
   const patterns = [
     /(?:factura|invoice)[\s\/]*(?:n[º°ºo]\.?|num(?:ero)?|nr\.?|#)\s*:?\s*([A-Z]*-?)?(\d+)/i,
     /(?:n[º°ºo]\.?|num(?:ero)?|nr\.?)\s*(?:factura|invoice)?\s*:?\s*([A-Z]*-?)?(\d+)/i,
@@ -21,8 +22,8 @@ function extractInvoiceNumber(text: string): string | null {
   ];
 
   for (const pattern of patterns) {
-    const match = text.match(pattern);
-    if (match && match[2]) {
+    const match = safeText.match(pattern);
+    if (match && match[2] && typeof match[2] === 'string') {
       const num = match[2].replace(/^0+/, '');
       return num || '0';
     }
@@ -31,7 +32,9 @@ function extractInvoiceNumber(text: string): string | null {
 }
 
 function extractCompany(text: string, filename: string): string {
-  const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+  const safeFilename = filename || 'email.pdf';
+  const safeText = text || '';
+  const lines = safeText.split('\n').map(l => l.trim()).filter(l => l.length > 0);
 
   const companyPatterns = [
     /^([A-Z][A-Za-z0-9&\s,\.\-]{2,80}(?:\s+S\.?L\.?(?:U\.?)?|\s+S\.?A\.?|\s+SL|\s+SA|\s+SLU|\s+INC\.?|\s+LLC\.?|\s+LTD\.?|\s+GmbH|\s+B\.?V\.?))/,
@@ -44,7 +47,7 @@ function extractCompany(text: string, filename: string): string {
 
     for (const pattern of companyPatterns) {
       const match = line.match(pattern);
-      if (match) return match[1].trim();
+      if (match && match[1]) return match[1].trim();
     }
   }
 
@@ -56,12 +59,19 @@ function extractCompany(text: string, filename: string): string {
     }
   }
 
-  return filename.replace(/\.pdf$/i, '').substring(0, 60) || 'Factura email';
+  return safeFilename.replace(/\.pdf$/i, '').substring(0, 60) || 'Factura email';
+}
+
+// Limpia un string para usarlo como filename (seguro ante null/undefined)
+function safeCleanCompany(value: string | undefined | null): string {
+  if (!value || typeof value !== 'string') return 'Empresa';
+  return value.replace(/[^a-zA-Z0-9\s\-]/g, '').trim().substring(0, 50) || 'Empresa';
 }
 
 function extractDescription(text: string): string | null {
-  const m = text.match(/(?:concepto|descripci[oó]n|detalle|description|services?)[:\s]+([^\n\r]{5,200})/i);
-  if (m && m[1]) {
+  const safeText = text || '';
+  const m = safeText.match(/(?:concepto|descripci[oó]n|detalle|description|services?)[:\s]+([^\n\r]{5,200})/i);
+  if (m && m[1] && typeof m[1] === 'string') {
     let desc = m[1].trim().replace(/\s+/g, ' ');
     desc = desc.split(/\s+(?:total|importe|base|iva|subtotal|precio|qty|cantidad|unidades)/i)[0];
     if (desc.length > 150) desc = desc.substring(0, 147) + '...';
@@ -113,6 +123,7 @@ function extractAmount(text: string): {
   for (const pattern of totalPatterns) {
     const matches = Array.from(text.matchAll(pattern));
     for (const m of matches) {
+      if (!m || !m[1]) continue;
       const amount = parseFloat(m[1].replace(/\./g, '').replace(',', '.'));
       if (!isNaN(amount) && amount > 0 && amount < 100000 && amount > maxFound) {
         maxFound = amount;
@@ -132,7 +143,7 @@ function extractAmount(text: string): {
   const basePatterns = [/base\s*imponible[:\s]*€?\s*([\d.,]+)/gi, /subtotal[:\s]*€?\s*([\d.,]+)/gi];
   for (const p of basePatterns) {
     const m = text.match(p);
-    if (m) {
+    if (m && m[1]) {
       const a = parseFloat(m[1].replace(/\./g, '').replace(',', '.'));
       if (!isNaN(a) && a > 0) {
         base = currency !== 'EUR' ? a * rateToEUR : a;
@@ -156,13 +167,14 @@ function extractAmount(text: string): {
 }
 
 function extractDate(text: string): string {
+  const safeText = text || '';
   const patterns = [
     /fecha[:\s]+(\d{1,2})[/\-.](\d{1,2})[/\-.](\d{4})/i,
     /(\d{1,2})[/\-.](\d{1,2})[/\-.](\d{4})/,
   ];
   for (const p of patterns) {
-    const m = text.match(p);
-    if (m) {
+    const m = safeText.match(p);
+    if (m && m[1] && m[2] && m[3]) {
       const day = m[1].padStart(2, '0');
       const month = m[2].padStart(2, '0');
       const year = m[3];
@@ -280,14 +292,17 @@ export async function POST(req: NextRequest) {
     // Analizar
     const invoiceNumber = extractInvoiceNumber(text);
     const filename = file.name || 'email.pdf';
-    let company = extractCompany(text, filename);
+    let company: string = extractCompany(text, filename) || 'Empresa desconocida';
 
     // Si la empresa no se detectó bien, intentar desde el remitente del email
-    if ((!company || company.length < 4) && sender) {
+    if ((!company || company === 'Empresa desconocida' || company.length < 4) && sender) {
       // Extraer dominio del email del remitente (ej: "Stripe <invoices@stripe.com>" → "Stripe")
       const senderMatch = sender.match(/^([^<]+?)\s*</) || sender.match(/@([^.]+)\./);
-      if (senderMatch) company = senderMatch[1].trim();
+      if (senderMatch && senderMatch[1]) company = senderMatch[1].trim();
     }
+
+    // GUARANTÍA FINAL: company SIEMPRE debe ser un string válido
+    if (!company || typeof company !== 'string') company = 'Empresa desconocida';
 
     let description = extractDescription(text) || subject || null;
     const { total, base, vat, ivaPercent, originalCurrency, originalAmount } = extractAmount(text);
@@ -342,8 +357,9 @@ export async function POST(req: NextRequest) {
         '05': 'May', '06': 'Jun', '07': 'Jul', '08': 'Ago',
         '09': 'Sep', '10': 'Oct', '11': 'Nov', '12': 'Dic'
       };
-      const monthShort = monthMap[date.slice(5, 7)] || 'Sin';
-      const cleanCompany = company.replace(/[^a-zA-Z0-9\s\-]/g, '').trim().substring(0, 50);
+      const dateStr = date || new Date().toISOString().split('T')[0];
+      const monthShort = monthMap[dateStr.slice(5, 7)] || 'Sin';
+      const cleanCompany = safeCleanCompany(company);
       const storageFileName = `${monthShort}-${invoiceNumber || 'X'}-${cleanCompany}-${Date.now()}.pdf`;
       const storagePath = `invoices/${storageFileName}`;
 
@@ -390,7 +406,7 @@ export async function POST(req: NextRequest) {
     const driveWebhook = process.env.DRIVE_WEBHOOK_EXPENSES;
     if (driveWebhook) {
       try {
-        const cleanCompany = company.replace(/[^a-zA-Z0-9\s\-]/g, '').trim().substring(0, 50);
+        const cleanCompany = safeCleanCompany(company);
         // Usar finalNumber que ya tiene formato "N-Mes" (ej: "1-Jun")
         const driveFileName = `${finalNumber}-${cleanCompany}.pdf`;
 
