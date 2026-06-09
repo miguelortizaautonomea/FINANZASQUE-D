@@ -640,10 +640,12 @@ export default function Dashboard() {
     // Si solo introdujo Descripción pero no Empresa, usar la Descripción como Empresa
     const companyFinal = formData.company || formData.description || 'Sin nombre';
 
-    // 🤖 AUTO-NUMERACIÓN para facturas de GASTO con factura
-    // Si es expense + hasInvoice y NO hay número específico → generar automático (ej: "1-Jun")
+    // 🤖 AUTO-NUMERACIÓN para facturas de GASTO
+    // SIEMPRE auto-generamos el número para gastos (formato "N-Mes" ej: "1-Jun")
+    // El usuario no debe poder ponerlo manualmente
     let finalNumber = formData.number;
-    if (type === 'expense' && hasInvoice && !finalNumber) {
+    if (type === 'expense') {
+      // Para gastos siempre auto-generar (ignoramos lo que haya en formData.number)
       finalNumber = getNextExpenseNumber(formData.date);
     } else if (!finalNumber) {
       finalNumber = `MAN-${Date.now()}`;
@@ -3772,28 +3774,27 @@ export default function Dashboard() {
                 )}
               </div>
 
-              <div className="grid grid-cols-3 gap-3">
-                <div>
-                  <label className="block text-xs font-bold text-zinc-400 mb-2 tracking-wider uppercase">Nº Factura</label>
-                  <input
-                    type="text"
-                    value={formData.number}
-                    onChange={(e) => setFormData({ ...formData, number: e.target.value })}
-                    placeholder="Ej: 012"
-                    className="w-full px-3 py-2.5 border border-zinc-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-rose-500 text-white bg-zinc-950 placeholder:text-zinc-600 text-sm"
-                  />
+              {/* Banner Nº Factura Automático */}
+              <div className="bg-emerald-500/5 border border-emerald-500/20 rounded-lg px-4 py-2.5 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-bold tracking-wider uppercase text-emerald-400">Nº Factura Auto</span>
                 </div>
-                <div className="col-span-2">
-                  <label className="block text-xs font-bold text-zinc-400 mb-2 tracking-wider uppercase">Empresa *</label>
-                  <input
-                    type="text"
-                    value={formData.company}
-                    onChange={(e) => setFormData({ ...formData, company: e.target.value })}
-                    placeholder="Ej: Mercadona, Spotify..."
-                    className="w-full px-3 py-2.5 border border-zinc-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-rose-500 text-white bg-zinc-950 placeholder:text-zinc-600 text-sm"
-                  />
-                </div>
+                <span className="text-base font-bold text-white tabular-nums">
+                  {getNextExpenseNumber(formData.date)}
+                </span>
               </div>
+
+              <div>
+                <label className="block text-xs font-bold text-zinc-400 mb-2 tracking-wider uppercase">Empresa *</label>
+                <input
+                  type="text"
+                  value={formData.company}
+                  onChange={(e) => setFormData({ ...formData, company: e.target.value })}
+                  placeholder="Ej: Mercadona, Spotify..."
+                  className="w-full px-3 py-2.5 border border-zinc-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-rose-500 text-white bg-zinc-950 placeholder:text-zinc-600 text-sm"
+                />
+              </div>
+
               <div>
                 <label className="block text-xs font-bold text-zinc-400 mb-2 tracking-wider uppercase">Descripción / Concepto</label>
                 <input
@@ -3804,59 +3805,61 @@ export default function Dashboard() {
                   className="w-full px-4 py-2.5 border border-zinc-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-rose-500 focus:border-rose-500 text-white bg-zinc-950 placeholder:text-zinc-600"
                 />
               </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-bold text-zinc-400 mb-2 tracking-wider uppercase">Monto *</label>
-                  <div className="flex gap-2 items-stretch">
-                    <select
-                      value={(formData as any).currency || 'EUR'}
-                      onChange={(e) => setFormData({ ...formData, amount: '', amountWithoutVAT: '', currency: e.target.value } as any)}
-                      className="px-3 py-2.5 border border-zinc-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-rose-500 text-white bg-zinc-800 text-sm font-bold min-w-[70px]"
-                    >
-                      <option value="EUR">🇪🇺 EUR</option>
-                      <option value="USD">🇺🇸 USD</option>
-                    </select>
-                    <div className="relative flex-1">
-                      <input
-                        type="number"
-                        step="0.01"
-                        value={(formData as any).currency === 'USD' ? ((formData as any)._usdRaw || '') : formData.amount}
-                        onChange={(e) => {
-                          const val = e.target.value;
-                          const isUSD = (formData as any).currency === 'USD';
-                          if (isUSD) {
-                            const eur = val ? String(Math.round((parseFloat(val) / 1.15) * 100) / 100) : '';
-                            setFormData({ ...formData, amount: eur, amountWithoutVAT: eur, _usdRaw: val } as any);
-                          } else {
-                            setFormData({ ...formData, amount: val, amountWithoutVAT: val });
-                          }
-                        }}
-                        placeholder="0.00"
-                        className="w-full px-4 py-2.5 pr-12 border border-zinc-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-rose-500 focus:border-rose-500 text-white bg-zinc-950 placeholder:text-zinc-600"
-                      />
-                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 text-sm font-bold">
-                        {(formData as any).currency === 'USD' ? '$' : '€'}
-                      </span>
-                    </div>
+
+              {/* Monto en fila propia - con más espacio */}
+              <div>
+                <label className="block text-xs font-bold text-zinc-400 mb-2 tracking-wider uppercase">Monto *</label>
+                <div className="flex gap-2 items-stretch">
+                  <select
+                    value={(formData as any).currency || 'EUR'}
+                    onChange={(e) => setFormData({ ...formData, amount: '', amountWithoutVAT: '', currency: e.target.value } as any)}
+                    className="px-3 py-2.5 border border-zinc-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-rose-500 text-white bg-zinc-800 text-sm font-bold w-[90px]"
+                  >
+                    <option value="EUR">🇪🇺 EUR</option>
+                    <option value="USD">🇺🇸 USD</option>
+                  </select>
+                  <div className="relative flex-1">
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={(formData as any).currency === 'USD' ? ((formData as any)._usdRaw || '') : formData.amount}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        const isUSD = (formData as any).currency === 'USD';
+                        if (isUSD) {
+                          const eur = val ? String(Math.round((parseFloat(val) / 1.15) * 100) / 100) : '';
+                          setFormData({ ...formData, amount: eur, amountWithoutVAT: eur, _usdRaw: val } as any);
+                        } else {
+                          setFormData({ ...formData, amount: val, amountWithoutVAT: val });
+                        }
+                      }}
+                      placeholder="0.00"
+                      className="w-full px-4 py-2.5 pr-10 border border-zinc-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-rose-500 focus:border-rose-500 text-white bg-zinc-950 placeholder:text-zinc-600 text-base font-semibold"
+                    />
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 text-base font-bold pointer-events-none">
+                      {(formData as any).currency === 'USD' ? '$' : '€'}
+                    </span>
                   </div>
-                  {(formData as any).currency === 'USD' && (formData as any)._usdRaw && (
-                    <div className="mt-2 flex items-center gap-2 bg-amber-500/10 border border-amber-500/20 rounded-lg px-3 py-2">
-                      <span className="text-amber-400 text-sm font-bold">{parseFloat((formData as any)._usdRaw || 0).toFixed(2)}$</span>
-                      <span className="text-zinc-500 text-xs">÷ 1.15 =</span>
-                      <span className="text-emerald-400 text-sm font-bold">{parseFloat(formData.amount || '0').toFixed(2)}€</span>
-                      <span className="text-zinc-600 text-[10px] ml-auto">se guardará en EUR</span>
-                    </div>
-                  )}
                 </div>
-                <div>
-                  <label className="block text-xs font-bold text-zinc-400 mb-2 tracking-wider uppercase">Fecha</label>
-                  <input
-                    type="date"
-                    value={formData.date}
-                    onChange={(e) => setFormData({ ...formData, date: e.target.value })}
-                    className="w-full px-4 py-2.5 border border-zinc-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-rose-500 text-white bg-zinc-950"
-                  />
-                </div>
+                {(formData as any).currency === 'USD' && (formData as any)._usdRaw && (
+                  <div className="mt-2 flex items-center gap-2 bg-amber-500/10 border border-amber-500/20 rounded-lg px-3 py-2">
+                    <span className="text-amber-400 text-sm font-bold">{parseFloat((formData as any)._usdRaw || 0).toFixed(2)}$</span>
+                    <span className="text-zinc-500 text-xs">÷ 1.15 =</span>
+                    <span className="text-emerald-400 text-sm font-bold">{parseFloat(formData.amount || '0').toFixed(2)}€</span>
+                    <span className="text-zinc-600 text-[10px] ml-auto">se guardará en EUR</span>
+                  </div>
+                )}
+              </div>
+
+              {/* Fecha en fila propia */}
+              <div>
+                <label className="block text-xs font-bold text-zinc-400 mb-2 tracking-wider uppercase">Fecha</label>
+                <input
+                  type="date"
+                  value={formData.date}
+                  onChange={(e) => setFormData({ ...formData, date: e.target.value })}
+                  className="w-full px-4 py-2.5 border border-zinc-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-rose-500 text-white bg-zinc-950"
+                />
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
