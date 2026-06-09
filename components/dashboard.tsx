@@ -874,8 +874,12 @@ export default function Dashboard() {
   };
 
   // Funciones para abrir diálogos con formulario reiniciado
-  const openIncomeDialog = () => {
-    // Establecer valores por defecto ANTES de abrir
+  /**
+   * Abre el modal de INGRESO.
+   * @param hasInvoiceDefault - true si viene de "Fact. Ingresos" (= con factura)
+   *                            false si viene de Dashboard/Transacciones (= sin factura)
+   */
+  const openIncomeDialog = (hasInvoiceDefault: boolean = false) => {
     setFormData({
       number: '',
       company: '',
@@ -887,13 +891,19 @@ export default function Dashboard() {
       method: METHODS[0],
       ivaPercent: '21',
     });
-    setSelectedFile(null);
+    // Si viene de Fact. Ingresos → toggle de factura activo (placeholder File)
+    // Si viene de Dashboard/Transacciones → toggle desactivado
+    setSelectedFile(hasInvoiceDefault ? new File([], 'manual') : null);
     setPdfAnalysisError('');
     setShowIncomeDialog(true);
   };
 
-  const openExpenseDialog = () => {
-    // Establecer valores por defecto ANTES de abrir - IMPORTANTE para gastos: work + Transferencia
+  /**
+   * Abre el modal de GASTO.
+   * @param hasInvoiceDefault - true si viene de "Fact. Gastos" (= con factura)
+   *                            false si viene de Dashboard/Transacciones (= sin factura)
+   */
+  const openExpenseDialog = (hasInvoiceDefault: boolean = false) => {
     setFormData({
       number: '',
       company: '',
@@ -905,7 +915,7 @@ export default function Dashboard() {
       method: 'Transferencia', // ← SIEMPRE Transferencia para gastos
       ivaPercent: '21',
     });
-    setSelectedFile(null);
+    setSelectedFile(hasInvoiceDefault ? new File([], 'manual') : null);
     setPdfAnalysisError('');
     setShowExpenseDialog(true);
   };
@@ -2194,12 +2204,12 @@ export default function Dashboard() {
             });
 
           // Función para abrir el modal con "Tiene factura" pre-activado
+          // Desde "Fact. Ingresos" / "Fact. Gastos" → siempre con factura (hasInvoice=true)
           const openInvoiceDialog = () => {
-            setSelectedFile(new File([], 'manual')); // Activar toggle de factura
             if (isIncome) {
-              openIncomeDialog();
+              openIncomeDialog(true);
             } else {
-              openExpenseDialog();
+              openExpenseDialog(true);
             }
           };
 
