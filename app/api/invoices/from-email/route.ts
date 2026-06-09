@@ -31,6 +31,109 @@ function extractInvoiceNumber(text: string): string | null {
   return null;
 }
 
+// Diccionario de empresas conocidas (SaaS, servicios comunes)
+// Si se encuentra el keyword en el sender, filename o texto → devuelve el nombre amigable
+const KNOWN_COMPANIES: Record<string, string> = {
+  'anthropic': 'Claude',
+  'claude.ai': 'Claude',
+  'openai': 'ChatGPT',
+  'chatgpt': 'ChatGPT',
+  'stripe': 'Stripe',
+  'gohighlevel': 'GoHighLevel',
+  'highlevel': 'GoHighLevel',
+  'msgsndr': 'GoHighLevel',
+  'ghl': 'GoHighLevel',
+  'smartlead': 'Smartlead',
+  'mailerlite': 'MailerLite',
+  'slack': 'Slack',
+  'zapmail': 'Zapmail',
+  'zapier': 'Zapier',
+  'twilio': 'Twilio',
+  'loom': 'Loom',
+  'n8n': 'N8N',
+  'google workspace': 'Google Workspace',
+  'workspace': 'Google Workspace',
+  'apple.com': 'Apple',
+  'itunes': 'Apple',
+  'verificado meta': 'Verificado Meta',
+  'meta platforms': 'Verificado Meta',
+  'github': 'GitHub',
+  'vercel': 'Vercel',
+  'supabase': 'Supabase',
+  'railway': 'Railway',
+  'notion': 'Notion',
+  'figma': 'Figma',
+  'canva': 'Canva',
+  'circle.so': 'Circle Club',
+  'circle club': 'Circle Club',
+  'theplaze': 'The Plaze',
+  'plaze llc': 'The Plaze',
+  'retell': 'Retell AI',
+  'replicate': 'Replicate',
+  'cloudflare': 'Cloudflare',
+  'aws.amazon': 'AWS',
+  'digitalocean': 'DigitalOcean',
+  'render.com': 'Render',
+  'fly.io': 'Fly.io',
+  'millionverifier': 'MillionVerifier',
+  'mailgun': 'Mailgun',
+  'sendgrid': 'SendGrid',
+  'postmark': 'Postmark',
+  'calendly': 'Calendly',
+  'typeform': 'Typeform',
+  'airtable': 'Airtable',
+  'monday.com': 'Monday',
+  'asana': 'Asana',
+  'trello': 'Trello',
+  'linear.app': 'Linear',
+  'cursor.sh': 'Cursor',
+  'cursor.com': 'Cursor',
+  'midjourney': 'Midjourney',
+  'elevenlabs': 'ElevenLabs',
+  'descript': 'Descript',
+  'capcut': 'CapCut',
+  'adobe': 'Adobe',
+};
+
+/**
+ * Detecta empresas conocidas buscando en el sender (email), filename y texto del PDF.
+ * Esto soluciona casos donde el PDF dice "Anthropic, PBC" pero queremos "Claude".
+ */
+function detectKnownCompany(text: string, sender: string, filename: string): string | null {
+  const searchSpace = `${sender || ''} ${filename || ''} ${(text || '').substring(0, 2000)}`.toLowerCase();
+  for (const [keyword, displayName] of Object.entries(KNOWN_COMPANIES)) {
+    if (searchSpace.includes(keyword.toLowerCase())) {
+      return displayName;
+    }
+  }
+  return null;
+}
+
+/**
+ * Extrae el nombre legible del remitente del email.
+ * "Anthropic <billing@anthropic.com>" → "Anthropic"
+ * "billing@stripe.com" → "Stripe"
+ */
+function extractSenderName(sender: string): string | null {
+  if (!sender) return null;
+  // Caso 1: "Nombre Bonito <email@dominio.com>"
+  const namedMatch = sender.match(/^"?([^"<]+?)"?\s*<[^>]+>/);
+  if (namedMatch && namedMatch[1]) {
+    const name = namedMatch[1].trim();
+    if (name.length >= 2 && !/^[\d\s.,@\-]+$/.test(name)) {
+      return name.substring(0, 50);
+    }
+  }
+  // Caso 2: solo email "billing@stripe.com" → "Stripe"
+  const emailMatch = sender.match(/@([a-z0-9\-]+)\.[a-z]+/i);
+  if (emailMatch && emailMatch[1]) {
+    const domain = emailMatch[1];
+    // Capitalizar primera letra
+    return domain.charAt(0).toUpperCase() + domain.slice(1);
+  }
+  return null;
+}
+
 function extractCompany(text: string, filename: string): string {
   const safeFilename = filename || 'email.pdf';
   const safeText = text || '';
@@ -292,14 +395,17 @@ export async function POST(req: NextRequest) {
     // Analizar
     const invoiceNumber = extractInvoiceNumber(text);
     const filename = file.name || 'email.pdf';
-    let company: string = extractCompany(text, filename) || 'Empresa desconocida';
 
-    // Si la empresa no se detectó bien, intentar desde el remitente del email
-    if ((!company || company === 'Empresa desconocida' || company.length < 4) && sender) {
-      // Extraer dominio del email del remitente (ej: "Stripe <invoices@stripe.com>" → "Stripe")
-      const senderMatch = sender.match(/^([^<]+?)\s*</) || sender.match(/@([^.]+)\./);
-      if (senderMatch && senderMatch[1]) company = senderMatch[1].trim();
-    }
+    // 🎯 DETECCIÓN INTELIGENTE DE EMPRESA - 4 estrategias por orden de prioridad:
+    // 1) Empresas conocidas (Anthropic → Claude, OpenAI → ChatGPT, etc.)
+    // 2) Nombre del remitente del email ("Anthropic <billing@...>" → "Anthropic")
+    // 3) Extracción del texto del PDF (patrones S.L., S.A., etc.)
+    // 4) Fallback al nombre del archivo
+    let company: string =
+      detectKnownCompany(text, sender, filename) ||
+      extractSenderName(sender) ||
+      extractCompany(text, filename) ||
+      'Empresa desconocida';
 
     // GUARANTÍA FINAL: company SIEMPRE debe ser un string válido
     if (!company || typeof company !== 'string') company = 'Empresa desconocida';
@@ -427,9 +533,14 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    // Nombre del archivo listo para usar en n8n al subir a Drive
+    // Formato: "1-Jun-Claude.pdf" (numero-mes-empresa)
+    const driveDisplayFileName = `${finalNumber}-${safeCleanCompany(company)}.pdf`;
+
     return NextResponse.json({
       success: true,
       invoice: newInvoice,
+      driveFileName: driveDisplayFileName, // 👈 Para usar en n8n: {{ $json.driveFileName }}
       currency: { original: originalCurrency, converted: 'EUR', originalAmount, finalAmount: total },
       message: `✅ Factura "${company}" añadida: ${total.toFixed(2)}€${conversionMsg}`,
       driveUpload: driveWebhook ? 'queued' : 'disabled'
