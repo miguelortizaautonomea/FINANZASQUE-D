@@ -654,8 +654,8 @@ export default function Dashboard() {
     const newInvoice: Invoice = {
       id: Date.now().toString(),
       type,
-      // Los ingresos y gastos siempre son categoría 'work' (facturas de trabajo)
-      category: type === 'income' || type === 'expense' ? 'work' : formData.category,
+      // Usar la categoría que el usuario seleccionó (por defecto viene preseleccionada según tipo)
+      category: formData.category || (type === 'income' ? 'work' : CATEGORIES[0]),
       number: finalNumber,
       company: companyFinal,
       description: formData.description || undefined,
@@ -664,8 +664,8 @@ export default function Dashboard() {
       vat,
       date: formData.date,
       fileName: selectedFile?.name || 'manual',
-      // Los ingresos y gastos siempre son por 'Transferencia'
-      method: type === 'income' || type === 'expense' ? 'Transferencia' : formData.method,
+      // Usar el método que el usuario seleccionó (por defecto viene preseleccionado según tipo)
+      method: formData.method || (type === 'income' ? 'Transferencia' : METHODS[0]),
       hasInvoice,
     };
 
@@ -876,6 +876,7 @@ export default function Dashboard() {
   // Funciones para abrir diálogos con formulario reiniciado
   /**
    * Abre el modal de INGRESO.
+   * Defaults editables: category='work', method='Transferencia' (típicos para ingresos)
    * @param hasInvoiceDefault - true si viene de "Fact. Ingresos" (= con factura)
    *                            false si viene de Dashboard/Transacciones (= sin factura)
    */
@@ -886,9 +887,9 @@ export default function Dashboard() {
       amount: '',
       amountWithoutVAT: '',
       description: '',
-      category: CATEGORIES[0],
+      category: 'work', // ← Preseleccionado pero EDITABLE
       date: new Date().toISOString().split('T')[0],
-      method: METHODS[0],
+      method: 'Transferencia', // ← Preseleccionado pero EDITABLE
       ivaPercent: '21',
     });
     // Si viene de Fact. Ingresos → toggle de factura activo (placeholder File)
@@ -900,6 +901,7 @@ export default function Dashboard() {
 
   /**
    * Abre el modal de GASTO.
+   * Defaults editables: category='work', method='Transferencia'
    * @param hasInvoiceDefault - true si viene de "Fact. Gastos" (= con factura)
    *                            false si viene de Dashboard/Transacciones (= sin factura)
    */
@@ -910,9 +912,9 @@ export default function Dashboard() {
       amount: '',
       amountWithoutVAT: '',
       description: '',
-      category: 'work', // ← SIEMPRE work para gastos
+      category: 'work', // ← Preseleccionado pero EDITABLE
       date: new Date().toISOString().split('T')[0],
-      method: 'Transferencia', // ← SIEMPRE Transferencia para gastos
+      method: 'Transferencia', // ← Preseleccionado pero EDITABLE
       ivaPercent: '21',
     });
     setSelectedFile(hasInvoiceDefault ? new File([], 'manual') : null);
@@ -3628,16 +3630,31 @@ export default function Dashboard() {
                   />
                 </div>
               </div>
-              {/* Categoría y Método son automáticos para ingresos: work + Transferencia */}
-              <div className="bg-zinc-950 border border-zinc-800 rounded-lg p-3 flex items-center gap-3">
-                <div className="flex items-center gap-2 text-xs">
-                  <span className="text-zinc-500 uppercase tracking-wider">Categoría:</span>
-                  <span className="bg-blue-500/10 text-blue-400 border border-blue-500/20 px-2 py-0.5 rounded-full font-semibold">work</span>
+              {/* Categoría y Método - preseleccionados pero EDITABLES */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-zinc-400 mb-2 tracking-wider uppercase">Categoría</label>
+                  <select
+                    value={formData.category}
+                    onChange={(e) => setFormData({ ...formData, category: e.target.value })}
+                    className="w-full px-4 py-2.5 border border-zinc-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 text-white bg-zinc-950"
+                  >
+                    {CATEGORIES.map((cat) => (
+                      <option key={cat} value={cat}>{cat}</option>
+                    ))}
+                  </select>
                 </div>
-                <span className="text-zinc-700">·</span>
-                <div className="flex items-center gap-2 text-xs">
-                  <span className="text-zinc-500 uppercase tracking-wider">Método:</span>
-                  <span className="bg-violet-500/10 text-violet-400 border border-violet-500/20 px-2 py-0.5 rounded-full font-semibold">Transferencia</span>
+                <div>
+                  <label className="block text-xs font-bold text-zinc-400 mb-2 tracking-wider uppercase">Método</label>
+                  <select
+                    value={formData.method}
+                    onChange={(e) => setFormData({ ...formData, method: e.target.value })}
+                    className="w-full px-4 py-2.5 border border-zinc-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 text-white bg-zinc-950"
+                  >
+                    {METHODS.map((m) => (
+                      <option key={m} value={m}>{m}</option>
+                    ))}
+                  </select>
                 </div>
               </div>
               <label className="flex items-center justify-between p-3 bg-zinc-950 border border-zinc-800 rounded-lg cursor-pointer hover:border-emerald-500/30 transition-all">
