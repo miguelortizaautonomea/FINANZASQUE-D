@@ -1441,8 +1441,9 @@ export default function Dashboard() {
       try {
         const htmlBlob = new Blob([html], { type: 'text/html' });
         const driveFormData = new FormData();
-        driveFormData.append('file', htmlBlob, fileName.replace('.pdf', '.html'));
-        driveFormData.append('fileName', fileName.replace('.pdf', '.html'));
+        const driveFileName = `${pdfTitle}.html`;
+        driveFormData.append('file', htmlBlob, driveFileName);
+        driveFormData.append('fileName', driveFileName);
         driveFormData.append('invoiceNumber', invoiceFullNumber);
         driveFormData.append('clientName', clientInfo.name);
         driveFormData.append('total', total.toFixed(2));
