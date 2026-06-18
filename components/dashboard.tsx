@@ -1016,312 +1016,271 @@ export default function Dashboard() {
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Factura ${invoiceNumber} - ${clientInfo.name}</title>
 <style>
-  @page { size: A4; margin: 0; }
-  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-  body {
-    font-family: 'Inter', -apple-system, 'Segoe UI', sans-serif;
-    background: #f8fafc;
-    color: #0f172a;
-    padding: 20px 16px;
-    line-height: 1.4;
-  }
-  .invoice {
-    max-width: 780px;
-    margin: 0 auto;
+  @page { size: A4; margin: 15mm; }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body {
+    font-family: -apple-system, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
     background: #ffffff;
-    border-radius: 18px;
-    box-shadow: 0 12px 40px rgba(15, 23, 42, 0.08);
-    overflow: hidden;
-    border: 1px solid #e2e8f0;
+    color: #1a1a1a;
+    line-height: 1.5;
+    font-size: 11pt;
   }
-  .hero {
-    background: linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #0f172a 100%);
-    color: white;
-    padding: 28px 36px 50px;
-    position: relative;
-    overflow: hidden;
+  body { padding: 0; }
+  .invoice { width: 100%; max-width: 100%; padding: 0; background: #ffffff; }
+
+  /* HEADER */
+  .header {
+    display: table;
+    width: 100%;
+    border-bottom: 3px solid #1e40af;
+    padding-bottom: 18px;
+    margin-bottom: 26px;
   }
-  .hero::before {
-    content: '';
-    position: absolute;
-    top: -80px;
-    right: -80px;
-    width: 280px;
-    height: 280px;
-    background: radial-gradient(circle, rgba(16, 185, 129, 0.15), transparent 70%);
-    border-radius: 50%;
-  }
-  .hero::after {
-    content: '';
-    position: absolute;
-    bottom: -100px;
-    left: -50px;
-    width: 220px;
-    height: 220px;
-    background: radial-gradient(circle, rgba(59, 130, 246, 0.1), transparent 70%);
-    border-radius: 50%;
-  }
-  .hero-grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 30px;
-    position: relative;
-    z-index: 1;
-  }
-  .brand h1 {
-    font-size: 1.4rem;
-    font-weight: 700;
-    letter-spacing: -0.02em;
+  .header-left, .header-right { display: table-cell; vertical-align: top; }
+  .header-right { text-align: right; }
+  .company-name {
+    font-size: 22pt;
+    font-weight: 800;
+    color: #1e40af;
+    letter-spacing: -0.5px;
     margin-bottom: 6px;
   }
-  .brand-info {
-    color: rgba(255,255,255,0.7);
-    font-size: 0.75rem;
-    line-height: 1.5;
-  }
-  .invoice-meta {
-    text-align: right;
+  .company-info {
+    font-size: 9pt;
+    color: #4a4a4a;
+    line-height: 1.6;
   }
   .invoice-label {
-    color: rgba(255,255,255,0.5);
-    font-size: 0.65rem;
+    font-size: 9pt;
+    color: #6b7280;
     font-weight: 600;
-    letter-spacing: 0.15em;
+    letter-spacing: 2px;
     text-transform: uppercase;
     margin-bottom: 4px;
   }
   .invoice-number {
-    font-size: 1.8rem;
+    font-size: 24pt;
     font-weight: 800;
-    letter-spacing: -0.03em;
-    color: white;
-    margin-bottom: 4px;
-  }
-  .invoice-date {
-    color: rgba(255,255,255,0.7);
-    font-size: 0.8rem;
-  }
-  .body {
-    padding: 30px 36px 28px;
-    margin-top: -30px;
-    background: white;
-    border-radius: 18px 18px 0 0;
-    position: relative;
-    z-index: 2;
-  }
-  .client-card {
-    background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
-    border: 1px solid #e2e8f0;
-    border-radius: 12px;
-    padding: 14px 18px;
-    margin-bottom: 20px;
-  }
-  .section-label {
-    color: #64748b;
-    font-size: 0.65rem;
-    font-weight: 700;
-    letter-spacing: 0.15em;
-    text-transform: uppercase;
+    color: #0f172a;
+    letter-spacing: -1px;
     margin-bottom: 6px;
   }
+  .invoice-date {
+    font-size: 10pt;
+    color: #4a4a4a;
+    font-weight: 500;
+  }
+
+  /* CLIENT */
+  .section-title {
+    font-size: 9pt;
+    color: #1e40af;
+    font-weight: 700;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    margin-bottom: 8px;
+    padding-bottom: 4px;
+    border-bottom: 1px solid #e5e7eb;
+  }
+  .client-block {
+    margin-bottom: 28px;
+    padding: 14px 18px;
+    border-left: 4px solid #1e40af;
+    background: #f8fafc;
+  }
   .client-name {
-    font-size: 1.05rem;
+    font-size: 13pt;
     font-weight: 700;
     color: #0f172a;
     margin-bottom: 4px;
   }
   .client-info {
-    color: #475569;
-    font-size: 0.8rem;
-    line-height: 1.45;
+    font-size: 10pt;
+    color: #4a4a4a;
+    line-height: 1.6;
   }
-  .items-table {
+
+  /* ITEMS TABLE */
+  table.items {
     width: 100%;
     border-collapse: collapse;
-    margin-bottom: 16px;
+    margin-bottom: 24px;
   }
-  .items-table thead th {
-    background: #f8fafc;
-    color: #475569;
-    font-size: 0.65rem;
-    font-weight: 700;
+  table.items thead th {
     text-align: left;
-    padding: 8px 12px;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-    border-bottom: 2px solid #e2e8f0;
-  }
-  .items-table thead th:last-child,
-  .items-table thead th:nth-last-child(2),
-  .items-table thead th:nth-last-child(3) {
-    text-align: right;
-  }
-  .items-table tbody td {
     padding: 10px 12px;
-    border-bottom: 1px solid #f1f5f9;
-    color: #0f172a;
-    font-size: 0.82rem;
-  }
-  .items-table tbody td:last-child,
-  .items-table tbody td:nth-last-child(2),
-  .items-table tbody td:nth-last-child(3) {
-    text-align: right;
-    white-space: nowrap;
-  }
-  .items-table tbody td:first-child {
-    font-weight: 500;
-  }
-  .totals {
-    margin-left: auto;
-    width: 300px;
-    background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
-    color: white;
-    border-radius: 12px;
-    padding: 14px 20px;
-    margin-bottom: 16px;
-  }
-  .total-row {
-    display: flex;
-    justify-content: space-between;
-    padding: 4px 0;
-    color: rgba(255,255,255,0.8);
-    font-size: 0.85rem;
-  }
-  .total-row.total {
-    border-top: 1px solid rgba(255,255,255,0.15);
-    margin-top: 8px;
-    padding-top: 10px;
-    color: white;
+    font-size: 9pt;
     font-weight: 700;
-    font-size: 1.1rem;
-  }
-  .total-row.total .amount {
-    color: #34d399;
-  }
-  .payment-info {
-    background: #f0fdf4;
-    border: 1px solid #bbf7d0;
-    border-radius: 10px;
-    padding: 10px 16px;
-    margin-bottom: 12px;
-  }
-  .payment-info-label {
-    color: #15803d;
-    font-size: 0.65rem;
-    font-weight: 700;
-    letter-spacing: 0.1em;
+    color: #ffffff;
+    background: #1e40af;
+    letter-spacing: 0.5px;
     text-transform: uppercase;
-    margin-bottom: 2px;
+    border: 1px solid #1e40af;
   }
-  .payment-info-text {
-    color: #166534;
-    font-size: 0.8rem;
-    font-weight: 500;
+  table.items thead th.num { text-align: right; }
+  table.items tbody td {
+    padding: 12px;
+    font-size: 10pt;
+    color: #1a1a1a;
+    border: 1px solid #e5e7eb;
+    vertical-align: top;
+  }
+  table.items tbody td.num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+  table.items tbody td.desc { font-weight: 500; }
+
+  /* TOTALS */
+  .totals-wrapper {
+    width: 100%;
+    margin-bottom: 26px;
+  }
+  table.totals {
+    margin-left: auto;
+    width: 280px;
+    border-collapse: collapse;
+  }
+  table.totals td {
+    padding: 8px 12px;
+    font-size: 10pt;
+    border-bottom: 1px solid #e5e7eb;
+  }
+  table.totals td.label { color: #4a4a4a; }
+  table.totals td.value { text-align: right; font-weight: 600; color: #1a1a1a; font-variant-numeric: tabular-nums; }
+  table.totals tr.grand-total td {
+    border-top: 2px solid #1e40af;
+    border-bottom: 2px solid #1e40af;
+    padding: 12px;
+    font-size: 13pt;
+    font-weight: 800;
+    color: #1e40af;
+    background: #eff6ff;
+  }
+
+  /* PAYMENT INFO */
+  .payment {
+    border: 2px solid #1e40af;
+    padding: 14px 18px;
+    margin-bottom: 22px;
+  }
+  .payment-label {
+    font-size: 9pt;
+    color: #1e40af;
+    font-weight: 700;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    margin-bottom: 6px;
+  }
+  .payment-text {
+    font-size: 10pt;
+    color: #1a1a1a;
+    line-height: 1.6;
   }
   .iban {
-    font-family: 'SF Mono', Monaco, monospace;
-    background: white;
-    padding: 3px 7px;
-    border-radius: 5px;
-    border: 1px solid #bbf7d0;
-    margin-top: 4px;
     display: inline-block;
-    color: #166534;
-    font-weight: 600;
-    font-size: 0.78rem;
+    font-family: 'Courier New', monospace;
+    font-size: 11pt;
+    font-weight: 700;
+    color: #1e40af;
+    padding: 4px 10px;
+    border: 1px solid #1e40af;
+    margin-top: 6px;
+    letter-spacing: 1px;
   }
-  .legal-note {
-    color: #64748b;
-    font-size: 0.68rem;
-    line-height: 1.4;
+
+  /* LEGAL */
+  .legal {
+    margin-top: 20px;
+    padding-top: 12px;
+    border-top: 1px solid #e5e7eb;
+    font-size: 8.5pt;
+    color: #6b7280;
+    line-height: 1.5;
     text-align: center;
-    padding-top: 10px;
-    border-top: 1px solid #f1f5f9;
   }
+  .legal strong { color: #1e40af; }
+
   @media print {
+    @page { size: A4; margin: 15mm; }
     body { padding: 0; background: white; }
-    .invoice { box-shadow: none; border-radius: 0; border: none; max-width: 100%; }
+    .invoice { box-shadow: none; }
   }
 </style>
 </head>
 <body>
 <div class="invoice">
-  <header class="hero">
-    <div class="hero-grid">
-      <div>
-        <h1 class="brand">Miguel Ángel Ortiz Cruz</h1>
-        <div class="brand-info">
-          NIF: 49549728T<br>
-          Calle Alemania 55<br>
-          21110 Aljaraque (Huelva), España<br>
-          miguelortizpersonal12@gmail.com
-        </div>
-      </div>
-      <div class="invoice-meta">
-        <div class="invoice-label">Factura</div>
-        <div class="invoice-number">Nº ${invoiceNumber}</div>
-        <div class="invoice-date">${dateFormatted}</div>
-      </div>
-    </div>
-  </header>
-  <main class="body">
-    <div class="client-card">
-      <div class="section-label">Facturar a</div>
-      <div class="client-name">${clientInfo.name}</div>
-      <div class="client-info">
-        ${clientInfo.htmlLines}
-      </div>
-    </div>
 
-    <div class="section-label" style="margin-bottom: 14px;">Conceptos</div>
-    <table class="items-table">
-      <thead>
-        <tr>
-          <th>Descripción</th>
-          <th>Uds.</th>
-          <th>Precio Unit.</th>
-          <th>Total</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr>
-          <td>${data.concept}</td>
-          <td>${units}</td>
-          <td>${formatEUR(pricePerUnit)}</td>
-          <td>${formatEUR(units * pricePerUnit)}</td>
-        </tr>
-      </tbody>
+  <div class="header">
+    <div class="header-left">
+      <div class="company-name">Miguel Ángel Ortiz Cruz</div>
+      <div class="company-info">
+        NIF: 49549728T<br>
+        Calle Alemania 55<br>
+        21110 Aljaraque (Huelva), España<br>
+        miguelortizpersonal12@gmail.com
+      </div>
+    </div>
+    <div class="header-right">
+      <div class="invoice-label">Factura</div>
+      <div class="invoice-number">Nº ${invoiceNumber}</div>
+      <div class="invoice-date">${dateFormatted}</div>
+    </div>
+  </div>
+
+  <div class="section-title">Facturar a</div>
+  <div class="client-block">
+    <div class="client-name">${clientInfo.name}</div>
+    <div class="client-info">${clientInfo.htmlLines}</div>
+  </div>
+
+  <div class="section-title">Conceptos</div>
+  <table class="items">
+    <thead>
+      <tr>
+        <th style="width: 55%;">Descripción</th>
+        <th class="num" style="width: 10%;">Uds.</th>
+        <th class="num" style="width: 17.5%;">Precio Unit.</th>
+        <th class="num" style="width: 17.5%;">Total</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td class="desc">${data.concept}</td>
+        <td class="num">${units}</td>
+        <td class="num">${formatEUR(pricePerUnit)}</td>
+        <td class="num">${formatEUR(units * pricePerUnit)}</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="totals-wrapper">
+    <table class="totals">
+      <tr>
+        <td class="label">Base imponible</td>
+        <td class="value">${formatEUR(subtotal)}</td>
+      </tr>
+      <tr>
+        <td class="label">IVA (${data.hasIVA ? '21' : '0'}%)</td>
+        <td class="value">${formatEUR(iva)}</td>
+      </tr>
+      <tr class="grand-total">
+        <td>TOTAL A PAGAR</td>
+        <td style="text-align: right;">${formatEUR(total)}</td>
+      </tr>
     </table>
+  </div>
 
-    <div class="totals">
-      <div class="total-row">
-        <span>Base imponible</span>
-        <span>${formatEUR(subtotal)}</span>
-      </div>
-      <div class="total-row">
-        <span>IVA (${data.hasIVA ? '21' : '0'}%)</span>
-        <span>${formatEUR(iva)}</span>
-      </div>
-      <div class="total-row total">
-        <span>TOTAL A PAGAR</span>
-        <span class="amount">${formatEUR(total)}</span>
-      </div>
+  <div class="payment">
+    <div class="payment-label">Forma de pago</div>
+    <div class="payment-text">
+      Transferencia bancaria al siguiente IBAN:<br>
+      <span class="iban">ES82 2100 7144 1902 0012 5905</span>
     </div>
+  </div>
 
-    <div class="payment-info">
-      <div class="payment-info-label">💳 Forma de pago</div>
-      <div class="payment-info-text">
-        Transferencia bancaria al siguiente IBAN:
-        <br>
-        <span class="iban">ES82 2100 7144 1902 0012 5905</span>
-      </div>
-    </div>
+  <div class="legal">
+    ${!data.hasIVA ? '<strong>OPERACIÓN EXTRACOMUNITARIA</strong> · "No sujeta a IVA por el Art. 69 y 70 de la Ley 37/92 del IVA"<br><br>' : ''}
+    Esta factura ha sido generada electrónicamente · Conserve este documento como justificante
+  </div>
 
-    <div class="legal-note">
-      ${!data.hasIVA ? '<strong>OPERACIÓN EXTRACOMUNITARIA</strong> · "No sujeta a IVA por el Art. 69 y 70 de la Ley 37/92 del IVA"<br><br>' : ''}
-      Esta factura ha sido generada electrónicamente · Conserve este documento como justificante
-    </div>
-  </main>
 </div>
 </body>
 </html>`;
@@ -1383,35 +1342,55 @@ export default function Dashboard() {
     const html = generateInvoiceHTML(issueData, invoiceFullNumber, today);
     const fileName = `Factura ${invoiceFullNumber} - ${clientInfo.name}.pdf`;
 
-    // 🖨️ Abrir el HTML en una nueva ventana y disparar el diálogo de impresión
-    // El usuario elige "Guardar como PDF" → PDF perfecto, mismo diseño que el HTML
-    // Este método es 100% fiable (usa el motor del navegador, no librerías de terceros)
-    const printWindow = window.open('', '_blank', 'width=900,height=1200');
-    if (!printWindow) {
-      alert('Por favor permite ventanas emergentes para generar la factura.');
+    // 🖨️ Imprimir con IFRAME oculto (método más confiable, no bloqueado por pop-ups)
+    // El usuario elige "Guardar como PDF" en el diálogo de impresión del navegador
+    const iframe = document.createElement('iframe');
+    iframe.style.position = 'fixed';
+    iframe.style.right = '0';
+    iframe.style.bottom = '0';
+    iframe.style.width = '0';
+    iframe.style.height = '0';
+    iframe.style.border = '0';
+    iframe.style.visibility = 'hidden';
+    document.body.appendChild(iframe);
+
+    const idoc = iframe.contentDocument || iframe.contentWindow?.document;
+    if (!idoc) {
+      alert('No se pudo generar el documento. Intenta de nuevo.');
+      document.body.removeChild(iframe);
       return;
     }
-    printWindow.document.open();
-    printWindow.document.write(html);
-    printWindow.document.close();
+    idoc.open();
+    idoc.write(html);
+    idoc.close();
 
-    // Esperar a que cargue completamente (fonts, CSS) antes de imprimir
-    const triggerPrint = () => {
-      setTimeout(() => {
-        try {
-          printWindow.focus();
-          printWindow.print();
-        } catch (e) {
-          console.error('Error en print:', e);
+    // Esperar a que el iframe termine de cargar el HTML antes de imprimir
+    const printIframe = () => {
+      try {
+        if (iframe.contentWindow) {
+          iframe.contentWindow.focus();
+          iframe.contentWindow.print();
         }
-      }, 800);
+      } catch (e) {
+        console.error('Error en print:', e);
+      }
+      // Cleanup después de imprimir (dar tiempo al diálogo)
+      setTimeout(() => {
+        if (iframe.parentNode) iframe.parentNode.removeChild(iframe);
+      }, 5000);
     };
 
-    if (printWindow.document.readyState === 'complete') {
-      triggerPrint();
-    } else {
-      printWindow.addEventListener('load', triggerPrint);
-    }
+    // Esperar tanto el onload como un timeout de seguridad
+    let printed = false;
+    const safePrint = () => {
+      if (printed) return;
+      printed = true;
+      // Pequeño delay para asegurar render completo (fonts, layout)
+      setTimeout(printIframe, 400);
+    };
+    iframe.onload = safePrint;
+    // Fallback: si onload no se dispara en 1.5s, imprimimos igual
+    setTimeout(safePrint, 1500);
 
     // 📤 Subir a Google Drive (en background) usando un Blob HTML
     // n8n recibirá el HTML y lo guardará como factura.html en Drive
