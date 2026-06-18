@@ -208,7 +208,7 @@ export default function Dashboard() {
   const [categoryMonth, setCategoryMonth] = useState<string>('all'); // 'all' o '2026-06'
 
   // Ordenamiento para Fact. Ingresos y Fact. Gastos
-  const [invoiceSortBy, setInvoiceSortBy] = useState<'number-asc' | 'number-desc' | 'date-asc' | 'date-desc'>('number-asc');
+  const [invoiceSortBy, setInvoiceSortBy] = useState<'number-asc' | 'number-desc' | 'date-asc' | 'date-desc'>('number-desc');
 
   // Estado para emitir nuevas facturas
   const [showIssueDialog, setShowIssueDialog] = useState(false);
@@ -1717,7 +1717,13 @@ export default function Dashboard() {
             return (
               <button
                 key={item.id}
-                onClick={() => setActiveView(item.id)}
+                onClick={() => {
+                  setActiveView(item.id);
+                  // Al entrar a Fact. Ingresos/Gastos, resetear orden a "Nº Desc"
+                  if (item.id === 'invoices-income' || item.id === 'invoices-expense') {
+                    setInvoiceSortBy('number-desc');
+                  }
+                }}
                 className={`w-full flex items-center justify-between gap-3 px-3 py-2.5 rounded-lg transition-all group ${
                   isActive
                     ? 'bg-gradient-to-r from-emerald-500/20 to-emerald-500/5 text-white border border-emerald-500/30'
