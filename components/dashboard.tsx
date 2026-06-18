@@ -987,14 +987,46 @@ export default function Dashboard() {
   };
 
   // Parser inteligente del bloque del cliente
-  // Devuelve { name: primera línea, htmlLines: HTML con todas las líneas restantes }
+  // Devuelve { name: primera línea, htmlLines: HTML con todas las líneas restantes, country: país detectado }
   const parseClientBlock = (block: string) => {
     const lines = block.split('\n').map(l => l.trim()).filter(l => l.length > 0);
-    if (lines.length === 0) return { name: 'Cliente', htmlLines: '' };
+    if (lines.length === 0) return { name: 'Cliente', htmlLines: '', country: '' };
     const name = lines[0];
     const restLines = lines.slice(1);
     const htmlLines = restLines.map(l => `<div>${l}</div>`).join('');
-    return { name, htmlLines };
+
+    // 🌍 Detectar país del cliente (para la leyenda fiscal)
+    // Lista de países comunes en operaciones extracomunitarias
+    const COUNTRIES = [
+      'Andorra', 'Estados Unidos', 'USA', 'United States', 'Reino Unido', 'United Kingdom', 'UK',
+      'Suiza', 'Switzerland', 'Emiratos Árabes Unidos', 'Emirates', 'Dubai', 'Dubái', 'UAE', 'EAU',
+      'Mónaco', 'Monaco', 'San Marino', 'Liechtenstein', 'Noruega', 'Norway', 'Islandia', 'Iceland',
+      'Canadá', 'Canada', 'México', 'Mexico', 'Argentina', 'Chile', 'Colombia', 'Perú', 'Peru',
+      'Brasil', 'Brazil', 'Japón', 'Japan', 'China', 'India', 'Singapur', 'Singapore',
+      'Australia', 'Nueva Zelanda', 'New Zealand', 'Sudáfrica', 'South Africa',
+      'Israel', 'Turquía', 'Turkey', 'Rusia', 'Russia', 'Ucrania', 'Ukraine'
+    ];
+    let country = '';
+    // Buscar en todas las líneas (case insensitive)
+    const blockLower = block.toLowerCase();
+    for (const c of COUNTRIES) {
+      if (blockLower.includes(c.toLowerCase())) {
+        country = c;
+        break;
+      }
+    }
+    // Si no encontró ninguno conocido y hay más de 1 línea, asumir que la última línea es el país
+    if (!country && restLines.length > 0) {
+      const lastLine = restLines[restLines.length - 1];
+      // Solo si la última línea parece un país (corta, sin números, sin "Calle"/"NIF"/etc)
+      if (lastLine.length >= 3 && lastLine.length <= 40 &&
+          !/^\d/.test(lastLine) &&
+          !/calle|avenida|nif|fiscal|cif|email|tel/i.test(lastLine)) {
+        country = lastLine;
+      }
+    }
+
+    return { name, htmlLines, country };
   };
 
   // Genera el HTML moderno de la factura emitida
@@ -1277,7 +1309,7 @@ export default function Dashboard() {
   </div>
 
   <div class="legal">
-    ${!data.hasIVA ? '<strong>OPERACIÓN EXTRACOMUNITARIA</strong> · "No sujeta a IVA por el Art. 69 y 70 de la Ley 37/92 del IVA"<br><br>' : ''}
+    ${!data.hasIVA ? `<strong>Operación exenta de IVA por prestación de servicios a cliente extranjero${clientInfo.country ? ` (${clientInfo.country})` : ''}.</strong><br><br>` : ''}
     Esta factura ha sido generada electrónicamente · Conserve este documento como justificante
   </div>
 
