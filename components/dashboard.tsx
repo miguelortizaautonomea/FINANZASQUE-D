@@ -1372,7 +1372,8 @@ export default function Dashboard() {
 
     // Generar el HTML de la factura
     const html = generateInvoiceHTML(issueData, invoiceFullNumber, today);
-    const fileName = `Factura ${invoiceFullNumber} - ${clientInfo.name}.pdf`;
+    // Nombre del PDF SIN extensión (el navegador la añade automáticamente al guardar)
+    const pdfTitle = `Factura ${invoiceFullNumber} - ${clientInfo.name}`;
 
     // 🖨️ Imprimir con IFRAME oculto (método más confiable, no bloqueado por pop-ups)
     // El usuario elige "Guardar como PDF" en el diálogo de impresión del navegador
@@ -1396,6 +1397,12 @@ export default function Dashboard() {
     idoc.write(html);
     idoc.close();
 
+    // 🏷️ Cambiar el <title> del documento padre temporalmente
+    // Esto hace que el navegador use ese título como nombre del PDF al guardar
+    // (los navegadores usan el title de la ventana TOP, no del iframe)
+    const originalTitle = document.title;
+    document.title = pdfTitle;
+
     // Esperar a que el iframe termine de cargar el HTML antes de imprimir
     const printIframe = () => {
       try {
@@ -1409,6 +1416,8 @@ export default function Dashboard() {
       // Cleanup después de imprimir (dar tiempo al diálogo)
       setTimeout(() => {
         if (iframe.parentNode) iframe.parentNode.removeChild(iframe);
+        // Restaurar el título original de la app después de imprimir
+        document.title = originalTitle;
       }, 5000);
     };
 
