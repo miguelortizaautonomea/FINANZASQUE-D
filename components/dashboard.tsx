@@ -1309,7 +1309,10 @@ export default function Dashboard() {
   </div>
 
   <div class="legal">
-    ${!data.hasIVA ? `<strong>OPERACIÓN EXTRACOMUNITARIA</strong> "NO SUJETA A IVA POR EL ART. 69 y 70 DE LA LEY 37/92 DEL IVA"<br><br>` : ''}
+    ${data.hasIVA
+      ? `<strong>Forma de pago:</strong> Transferencia bancaria al IBAN indicado.<br><br>Factura emitida con IVA 21 % según régimen general de autónomos en España.<br><br>`
+      : `<strong>OPERACIÓN EXTRACOMUNITARIA</strong> "NO SUJETA A IVA POR EL ART. 69 y 70 DE LA LEY 37/92 DEL IVA"<br><br>`
+    }
     Esta factura ha sido generada electrónicamente · Conserve este documento como justificante
   </div>
 
