@@ -1383,82 +1383,61 @@ export default function Dashboard() {
     const html = generateInvoiceHTML(issueData, invoiceFullNumber, today);
     const fileName = `Factura ${invoiceFullNumber} - ${clientInfo.name}.pdf`;
 
-    // Crear un contenedor temporal con el HTML para convertirlo a PDF
-    const container = document.createElement('div');
-    container.innerHTML = html;
-    container.style.position = 'fixed';
-    container.style.left = '0';
-    container.style.top = '0';
-    container.style.width = '210mm';
-    container.style.height = '297mm';
-    container.style.opacity = '0';
-    container.style.pointerEvents = 'none';
-    container.style.zIndex = '-9999';
-    document.body.appendChild(container);
+    // 🖨️ Abrir el HTML en una nueva ventana y disparar el diálogo de impresión
+    // El usuario elige "Guardar como PDF" → PDF perfecto, mismo diseño que el HTML
+    // Este método es 100% fiable (usa el motor del navegador, no librerías de terceros)
+    const printWindow = window.open('', '_blank', 'width=900,height=1200');
+    if (!printWindow) {
+      alert('Por favor permite ventanas emergentes para generar la factura.');
+      return;
+    }
+    printWindow.document.open();
+    printWindow.document.write(html);
+    printWindow.document.close();
 
-    try {
-      // Importar html2pdf dinámicamente (solo en cliente)
-      const html2pdf = (await import('html2pdf.js' as any)).default;
-
-      const pdfOptions = {
-        margin: 0,
-        filename: fileName,
-        image: { type: 'png', quality: 1 },
-        html2canvas: {
-          scale: 3,
-          useCORS: true,
-          allowTaint: true,
-          backgroundColor: '#ffffff',
-          logging: false,
-          windowWidth: 800
-        },
-        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait', compress: true },
-      };
-
-      // Generar el PDF como Blob
-      const pdfBlob: Blob = await html2pdf().set(pdfOptions).from(container).output('blob');
-
-      // Descargar localmente
-      const downloadUrl = URL.createObjectURL(pdfBlob);
-      const a = document.createElement('a');
-      a.href = downloadUrl;
-      a.download = fileName;
-      a.click();
-      URL.revokeObjectURL(downloadUrl);
-
-      // Subir a Google Drive vía webhook de n8n
-      const webhookUrl = process.env.NEXT_PUBLIC_DRIVE_WEBHOOK;
-      if (webhookUrl) {
-        const formData = new FormData();
-        formData.append('file', pdfBlob, fileName);
-        formData.append('fileName', fileName);
-        formData.append('invoiceNumber', invoiceFullNumber);
-        formData.append('clientName', clientInfo.name);
-        formData.append('total', total.toFixed(2));
-
+    // Esperar a que cargue completamente (fonts, CSS) antes de imprimir
+    const triggerPrint = () => {
+      setTimeout(() => {
         try {
-          const response = await fetch(webhookUrl, {
-            method: 'POST',
-            body: formData,
-          });
-          if (response.ok) {
-            console.log('✅ Factura subida a Google Drive');
-          }
+          printWindow.focus();
+          printWindow.print();
         } catch (e) {
-          console.error('Error subiendo a Drive:', e);
+          console.error('Error en print:', e);
         }
+      }, 800);
+    };
+
+    if (printWindow.document.readyState === 'complete') {
+      triggerPrint();
+    } else {
+      printWindow.addEventListener('load', triggerPrint);
+    }
+
+    // 📤 Subir a Google Drive (en background) usando un Blob HTML
+    // n8n recibirá el HTML y lo guardará como factura.html en Drive
+    // (Si se quiere PDF en Drive, se necesitaría un convertidor server-side)
+    const webhookUrl = process.env.NEXT_PUBLIC_DRIVE_WEBHOOK;
+    if (webhookUrl) {
+      try {
+        const htmlBlob = new Blob([html], { type: 'text/html' });
+        const driveFormData = new FormData();
+        driveFormData.append('file', htmlBlob, fileName.replace('.pdf', '.html'));
+        driveFormData.append('fileName', fileName.replace('.pdf', '.html'));
+        driveFormData.append('invoiceNumber', invoiceFullNumber);
+        driveFormData.append('clientName', clientInfo.name);
+        driveFormData.append('total', total.toFixed(2));
+
+        fetch(webhookUrl, {
+          method: 'POST',
+          body: driveFormData,
+        }).then(() => {
+          console.log('✅ Factura subida a Drive');
+        }).catch(err => {
+          console.error('Drive upload error:', err);
+        });
+      } catch (driveErr) {
+        console.error('Error preparing Drive upload:', driveErr);
       }
-    } catch (err) {
-      console.error('Error generando PDF:', err);
-      // Fallback: abrir HTML en nueva ventana
-      const blob = new Blob([html], { type: 'text/html' });
-      const url = URL.createObjectURL(blob);
-      const win = window.open(url, '_blank');
-      if (win) {
-        setTimeout(() => { win.focus(); win.print(); }, 1000);
-      }
-    } finally {
-      document.body.removeChild(container);
     }
 
     // Reset form
