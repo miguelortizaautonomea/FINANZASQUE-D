@@ -1375,7 +1375,21 @@ export default function Dashboard() {
     }
 
     // 📄 GENERAR PDF NATIVO CON jsPDF (no HTML, PDF de verdad)
-    const pdfFileName = `Factura ${invoiceFullNumber} - ${clientInfo.name}.pdf`;
+    // Nombre del archivo: {númeroFactura}-{Mes}-{Empresa}.pdf
+    // Ejemplo: "029-Jun-RacksLabs.pdf"
+    const monthMap: Record<string, string> = {
+      '01': 'Ene', '02': 'Feb', '03': 'Mar', '04': 'Abr',
+      '05': 'May', '06': 'Jun', '07': 'Jul', '08': 'Ago',
+      '09': 'Sep', '10': 'Oct', '11': 'Nov', '12': 'Dic'
+    };
+    const monthShort = monthMap[today.slice(5, 7)] || 'Sin';
+    const numberOnly = String(nextNumber).padStart(3, '0');
+    const cleanCompanyName = clientInfo.name
+      .replace(/[^a-zA-Z0-9\sÀ-ÿ\-]/g, '')
+      .trim()
+      .replace(/\s+/g, '')
+      .substring(0, 40);
+    const pdfFileName = `${numberOnly}-${monthShort}-${cleanCompanyName}.pdf`;
     let pdfBlob: Blob | null = null;
 
     try {
