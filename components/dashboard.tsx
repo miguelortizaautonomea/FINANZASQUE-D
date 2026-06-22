@@ -1374,80 +1374,252 @@ export default function Dashboard() {
       console.error('Error creando factura:', e);
     }
 
-    // Generar el HTML de la factura
-    const html = generateInvoiceHTML(issueData, invoiceFullNumber, today);
-    // Nombre del PDF SIN extensión (el navegador la añade automáticamente al guardar)
-    const pdfTitle = `Factura ${invoiceFullNumber} - ${clientInfo.name}`;
+    // 📄 GENERAR PDF NATIVO CON jsPDF (no HTML, PDF de verdad)
+    const pdfFileName = `Factura ${invoiceFullNumber} - ${clientInfo.name}.pdf`;
+    let pdfBlob: Blob | null = null;
 
-    // 🖨️ Imprimir con IFRAME oculto (método más confiable, no bloqueado por pop-ups)
-    // El usuario elige "Guardar como PDF" en el diálogo de impresión del navegador
-    const iframe = document.createElement('iframe');
-    iframe.style.position = 'fixed';
-    iframe.style.right = '0';
-    iframe.style.bottom = '0';
-    iframe.style.width = '0';
-    iframe.style.height = '0';
-    iframe.style.border = '0';
-    iframe.style.visibility = 'hidden';
-    document.body.appendChild(iframe);
+    try {
+      const { jsPDF } = await import('jspdf');
+      const doc = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' });
 
-    const idoc = iframe.contentDocument || iframe.contentWindow?.document;
-    if (!idoc) {
-      alert('No se pudo generar el documento. Intenta de nuevo.');
-      document.body.removeChild(iframe);
+      // === COLORES ===
+      const BLUE: [number, number, number] = [30, 64, 175];      // #1e40af
+      const BLACK: [number, number, number] = [26, 26, 26];
+      const GRAY: [number, number, number] = [107, 114, 128];
+      const LIGHT_GRAY: [number, number, number] = [229, 231, 235];
+      const BG_BLUE: [number, number, number] = [239, 246, 255]; // #eff6ff
+
+      let y = 20;
+
+      // === HEADER ===
+      // Logo/nombre empresa
+      doc.setFontSize(20);
+      doc.setTextColor(...BLUE);
+      doc.setFont('helvetica', 'bold');
+      doc.text('Miguel Ángel Ortiz Cruz', 15, y);
+
+      // Factura nº (derecha)
+      doc.setFontSize(8);
+      doc.setTextColor(...GRAY);
+      doc.setFont('helvetica', 'normal');
+      doc.text('FACTURA', 195, y - 5, { align: 'right' });
+      doc.setFontSize(18);
+      doc.setTextColor(...BLACK);
+      doc.setFont('helvetica', 'bold');
+      doc.text(`Nº ${invoiceFullNumber}`, 195, y + 2, { align: 'right' });
+      doc.setFontSize(9);
+      doc.setTextColor(...GRAY);
+      doc.setFont('helvetica', 'normal');
+      const dateFormatted = new Date(today).toLocaleDateString('es-ES', { day: '2-digit', month: 'long', year: 'numeric' });
+      doc.text(dateFormatted, 195, y + 7, { align: 'right' });
+
+      y += 6;
+      doc.setFontSize(8);
+      doc.setTextColor(74, 74, 74);
+      doc.text('NIF: 49549728T', 15, y);
+      y += 4;
+      doc.text('Calle Alemania 55', 15, y);
+      y += 4;
+      doc.text('21110 Aljaraque (Huelva), España', 15, y);
+      y += 4;
+      doc.text('miguelortizpersonal12@gmail.com', 15, y);
+
+      // Línea separadora
+      y += 5;
+      doc.setDrawColor(...BLUE);
+      doc.setLineWidth(0.7);
+      doc.line(15, y, 195, y);
+
+      // === FACTURAR A ===
+      y += 10;
+      doc.setFontSize(8);
+      doc.setTextColor(...BLUE);
+      doc.setFont('helvetica', 'bold');
+      doc.text('FACTURAR A', 15, y);
+
+      y += 2;
+      doc.setDrawColor(...LIGHT_GRAY);
+      doc.setLineWidth(0.2);
+      doc.line(15, y, 195, y);
+
+      y += 6;
+      // Bloque cliente con borde izquierdo azul
+      doc.setFillColor(...BLUE);
+      doc.rect(15, y - 2, 1.5, 25, 'F');
+
+      doc.setFontSize(12);
+      doc.setTextColor(...BLACK);
+      doc.setFont('helvetica', 'bold');
+      doc.text(clientInfo.name, 20, y + 2);
+
+      doc.setFontSize(9);
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(74, 74, 74);
+      const clientLines = issueData.clientBlock.split('\n').map(l => l.trim()).filter(l => l.length > 0).slice(1);
+      let clientY = y + 7;
+      for (const line of clientLines) {
+        doc.text(line, 20, clientY);
+        clientY += 4;
+      }
+      y = Math.max(y + 25, clientY + 2);
+
+      // === CONCEPTOS ===
+      y += 5;
+      doc.setFontSize(8);
+      doc.setTextColor(...BLUE);
+      doc.setFont('helvetica', 'bold');
+      doc.text('CONCEPTOS', 15, y);
+
+      y += 4;
+      // Tabla de items - cabecera azul
+      doc.setFillColor(...BLUE);
+      doc.rect(15, y, 180, 8, 'F');
+      doc.setTextColor(255, 255, 255);
+      doc.setFontSize(8);
+      doc.setFont('helvetica', 'bold');
+      doc.text('DESCRIPCIÓN', 17, y + 5);
+      doc.text('UDS.', 130, y + 5, { align: 'center' });
+      doc.text('PRECIO UNIT.', 160, y + 5, { align: 'center' });
+      doc.text('TOTAL', 192, y + 5, { align: 'right' });
+
+      // Fila de item
+      y += 8;
+      doc.setDrawColor(...LIGHT_GRAY);
+      doc.setLineWidth(0.2);
+      doc.rect(15, y, 180, 10, 'S');
+      doc.setTextColor(...BLACK);
+      doc.setFontSize(9);
+      doc.setFont('helvetica', 'normal');
+      // Descripción puede ser larga - dividir si es necesario
+      const conceptLines = doc.splitTextToSize(issueData.concept || 'Servicio', 110);
+      doc.text(conceptLines, 17, y + 6);
+      doc.text(String(units), 130, y + 6, { align: 'center' });
+      doc.text(`${pricePerUnit.toFixed(2).replace('.', ',')} €`, 175, y + 6, { align: 'right' });
+      doc.setFont('helvetica', 'bold');
+      doc.text(`${(units * pricePerUnit).toFixed(2).replace('.', ',')} €`, 192, y + 6, { align: 'right' });
+
+      y += 14;
+
+      // === TOTALES ===
+      const totalsX = 115;
+      const totalsWidth = 80;
+
+      doc.setFontSize(9);
+      doc.setTextColor(...GRAY);
+      doc.setFont('helvetica', 'normal');
+      doc.text('Base imponible', totalsX + 2, y);
+      doc.setTextColor(...BLACK);
+      doc.setFont('helvetica', 'bold');
+      doc.text(`${subtotal.toFixed(2).replace('.', ',')} €`, totalsX + totalsWidth - 2, y, { align: 'right' });
+
+      y += 5;
+      doc.setDrawColor(...LIGHT_GRAY);
+      doc.line(totalsX, y - 2, totalsX + totalsWidth, y - 2);
+
+      doc.setFontSize(9);
+      doc.setTextColor(...GRAY);
+      doc.setFont('helvetica', 'normal');
+      doc.text(`IVA (${issueData.hasIVA ? '21' : '0'} %)`, totalsX + 2, y);
+      doc.setTextColor(...BLACK);
+      doc.setFont('helvetica', 'bold');
+      doc.text(`${iva.toFixed(2).replace('.', ',')} €`, totalsX + totalsWidth - 2, y, { align: 'right' });
+
+      y += 6;
+      // Total destacado
+      doc.setFillColor(...BG_BLUE);
+      doc.rect(totalsX, y - 4, totalsWidth, 10, 'F');
+      doc.setDrawColor(...BLUE);
+      doc.setLineWidth(0.5);
+      doc.rect(totalsX, y - 4, totalsWidth, 10, 'S');
+
+      doc.setFontSize(11);
+      doc.setTextColor(...BLUE);
+      doc.setFont('helvetica', 'bold');
+      doc.text('TOTAL A PAGAR', totalsX + 2, y + 2);
+      doc.text(`${total.toFixed(2).replace('.', ',')} €`, totalsX + totalsWidth - 2, y + 2, { align: 'right' });
+
+      y += 16;
+
+      // === FORMA DE PAGO ===
+      doc.setDrawColor(...BLUE);
+      doc.setLineWidth(0.5);
+      doc.rect(15, y, 180, 22, 'S');
+      doc.setFontSize(8);
+      doc.setTextColor(...BLUE);
+      doc.setFont('helvetica', 'bold');
+      doc.text('FORMA DE PAGO', 17, y + 5);
+
+      doc.setFontSize(9);
+      doc.setTextColor(...BLACK);
+      doc.setFont('helvetica', 'normal');
+      doc.text('Transferencia bancaria al siguiente IBAN:', 17, y + 11);
+
+      doc.setFont('courier', 'bold');
+      doc.setTextColor(...BLUE);
+      doc.text('ES82 2100 7144 1902 0012 5905', 17, y + 17);
+
+      y += 27;
+
+      // === NOTA LEGAL ===
+      doc.setFontSize(8);
+      doc.setTextColor(...GRAY);
+      doc.setFont('helvetica', 'normal');
+
+      if (issueData.hasIVA) {
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(...BLACK);
+        doc.text('Forma de pago:', 15, y);
+        doc.setFont('helvetica', 'normal');
+        doc.setTextColor(...GRAY);
+        doc.text('Transferencia bancaria al IBAN indicado.', 45, y);
+        y += 5;
+        doc.text('Factura emitida con IVA 21 % según régimen general de autónomos en España.', 15, y);
+      } else {
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(...BLACK);
+        doc.text('OPERACIÓN EXTRACOMUNITARIA', 15, y);
+        y += 4;
+        doc.setFont('helvetica', 'normal');
+        doc.setTextColor(...GRAY);
+        const legalLines = doc.splitTextToSize('"NO SUJETA A IVA POR EL ART. 69 y 70 DE LA LEY 37/92 DEL IVA"', 180);
+        doc.text(legalLines, 15, y);
+        y += 4 * legalLines.length;
+      }
+
+      y += 5;
+      doc.setDrawColor(...LIGHT_GRAY);
+      doc.line(15, y, 195, y);
+      y += 4;
+      doc.setFontSize(7);
+      doc.setTextColor(...GRAY);
+      doc.setFont('helvetica', 'italic');
+      doc.text('Esta factura ha sido generada electrónicamente · Conserve este documento como justificante', 105, y, { align: 'center' });
+
+      // === GENERAR BLOB DEL PDF ===
+      pdfBlob = doc.output('blob');
+
+      // DESCARGAR EL PDF EN EL NAVEGADOR
+      const downloadUrl = URL.createObjectURL(pdfBlob);
+      const link = document.createElement('a');
+      link.href = downloadUrl;
+      link.download = pdfFileName;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      setTimeout(() => URL.revokeObjectURL(downloadUrl), 1000);
+    } catch (pdfErr) {
+      console.error('Error generando PDF:', pdfErr);
+      alert('Error al generar el PDF. Revisa la consola.');
       return;
     }
-    idoc.open();
-    idoc.write(html);
-    idoc.close();
 
-    // 🏷️ Cambiar el <title> del documento padre temporalmente
-    // Esto hace que el navegador use ese título como nombre del PDF al guardar
-    // (los navegadores usan el title de la ventana TOP, no del iframe)
-    const originalTitle = document.title;
-    document.title = pdfTitle;
-
-    // Esperar a que el iframe termine de cargar el HTML antes de imprimir
-    const printIframe = () => {
-      try {
-        if (iframe.contentWindow) {
-          iframe.contentWindow.focus();
-          iframe.contentWindow.print();
-        }
-      } catch (e) {
-        console.error('Error en print:', e);
-      }
-      // Cleanup después de imprimir (dar tiempo al diálogo)
-      setTimeout(() => {
-        if (iframe.parentNode) iframe.parentNode.removeChild(iframe);
-        // Restaurar el título original de la app después de imprimir
-        document.title = originalTitle;
-      }, 5000);
-    };
-
-    // Esperar tanto el onload como un timeout de seguridad
-    let printed = false;
-    const safePrint = () => {
-      if (printed) return;
-      printed = true;
-      // Pequeño delay para asegurar render completo (fonts, layout)
-      setTimeout(printIframe, 400);
-    };
-    iframe.onload = safePrint;
-    // Fallback: si onload no se dispara en 1.5s, imprimimos igual
-    setTimeout(safePrint, 1500);
-
-    // 📤 Subir a Google Drive (en background) usando un Blob HTML
-    // n8n recibirá el HTML y lo guardará como factura.html en Drive
-    // (Si se quiere PDF en Drive, se necesitaría un convertidor server-side)
+    // 📤 Subir el PDF a Google Drive vía webhook de n8n
     const webhookUrl = process.env.NEXT_PUBLIC_DRIVE_WEBHOOK;
-    if (webhookUrl) {
+    if (webhookUrl && pdfBlob) {
       try {
-        const htmlBlob = new Blob([html], { type: 'text/html' });
         const driveFormData = new FormData();
-        const driveFileName = `${pdfTitle}.html`;
-        driveFormData.append('file', htmlBlob, driveFileName);
-        driveFormData.append('fileName', driveFileName);
+        driveFormData.append('file', pdfBlob, pdfFileName);
+        driveFormData.append('fileName', pdfFileName);
         driveFormData.append('invoiceNumber', invoiceFullNumber);
         driveFormData.append('clientName', clientInfo.name);
         driveFormData.append('total', total.toFixed(2));
@@ -1455,8 +1627,9 @@ export default function Dashboard() {
         fetch(webhookUrl, {
           method: 'POST',
           body: driveFormData,
-        }).then(() => {
-          console.log('✅ Factura subida a Drive');
+        }).then(res => {
+          if (res.ok) console.log('✅ Factura PDF subida a Drive');
+          else console.error('Drive upload status:', res.status);
         }).catch(err => {
           console.error('Drive upload error:', err);
         });
