@@ -2170,7 +2170,7 @@ export default function Dashboard() {
               </div>
               <div>
                 <p className="text-sm font-semibold text-zinc-300">IVA A PAGAR</p>
-                <p className="text-xs text-zinc-500">Modelo 303 (21%)</p>
+                <p className="text-xs text-zinc-500">Modelo 303 (21% / 10% / 4%)</p>
               </div>
             </div>
             <p className="text-2xl font-bold text-orange-400">{accountingData.quarters[accountingData.currentQuarter - 1].ivaAPagar.toFixed(2)}€</p>
@@ -4009,7 +4009,9 @@ export default function Dashboard() {
                     onChange={(e) => setFormData({ ...formData, ivaPercent: e.target.value })}
                     className="w-full px-3 py-2 border border-zinc-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500 text-white bg-zinc-950 text-sm"
                   >
-                    <option value="21">21% (España)</option>
+                    <option value="21">21% (General)</option>
+                    <option value="10">10% (Reducido - gasolina, hostelería, transporte)</option>
+                    <option value="4">4% (Super reducido - alimentos básicos, libros)</option>
                     <option value="0">0% (Andorra, Dubai, exento)</option>
                   </select>
                   {formData.amount && (
@@ -4286,7 +4288,9 @@ export default function Dashboard() {
                     onChange={(e) => setFormData({ ...formData, ivaPercent: e.target.value })}
                     className="w-full px-3 py-2 border border-zinc-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500 text-white bg-zinc-950 text-sm"
                   >
-                    <option value="21">21% (España)</option>
+                    <option value="21">21% (General)</option>
+                    <option value="10">10% (Reducido - gasolina, hostelería, transporte)</option>
+                    <option value="4">4% (Super reducido - alimentos básicos, libros)</option>
                     <option value="0">0% (Andorra, Dubai, exento)</option>
                   </select>
                   {formData.amount && (
@@ -4498,7 +4502,9 @@ export default function Dashboard() {
                     onChange={(e) => setFormData({ ...formData, ivaPercent: e.target.value })}
                     className="w-full px-3 py-2 border border-zinc-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500 text-white bg-zinc-950 text-sm"
                   >
-                    <option value="21">21% (España)</option>
+                    <option value="21">21% (General)</option>
+                    <option value="10">10% (Reducido - gasolina, hostelería, transporte)</option>
+                    <option value="4">4% (Super reducido - alimentos básicos, libros)</option>
                     <option value="0">0% (Andorra, Dubai, exento)</option>
                   </select>
                   {formData.amount && (
