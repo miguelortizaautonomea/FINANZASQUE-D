@@ -143,48 +143,58 @@ function parseMoney(raw: string): number {
   return parseFloat(s);
 }
 
+// Detecta si un string parece una fecha tipo "03.06.2026" o "03/06/26" → ignorar como monto
+function looksLikeDate(s: string): boolean {
+  return /^\d{1,2}[\.\/-]\d{1,2}([\.\/-]\d{2,4})?$/.test(s.trim());
+}
+
 function extractAmount(text: string): { total: number | null; base: number | null; vat: number | null; ivaPercent: number } {
   let total: number | null = null;
   let base: number | null = null;
   let vat: number | null = null;
 
-  // === 1) Buscar TOTAL con contexto (prioridad alta) ===
-  // Acepta "Total: 15.99 €", "Total payable € 15.99", "Total a pagar 23,50€", etc.
-  const totalPatterns = [
-    /total\s*(?:payable|pendiente|a\s*pagar|factura|importe|due|charged|paid)?\s*[:\s]*[€$£]?\s*([\d]+[\.,]\d{1,3}|\d+)\s*[€$£]?/gi,
-    /TOTAL\s*[:\s]*[€$£]?\s*([\d]+[\.,]\d{1,3}|\d+)\s*[€$£]?/gi,
-    /importe\s*(?:total|a\s*pagar)\s*[:\s]*[€$£]?\s*([\d]+[\.,]\d{1,3}|\d+)/gi,
-    /grand\s*total\s*[:\s]*[€$£]?\s*([\d]+[\.,]\d{1,3}|\d+)/gi,
-  ];
-
-  // === 2) Buscar TODOS los importes con € o $ (también con espacios) ===
+  // === 1) PRIORIDAD ALTA: buscar todos los importes con € o $ explícito ===
+  // Esto es lo MÁS FIABLE: si hay un símbolo de moneda, es un monto real
   const allAmounts: number[] = [];
-  // Detecta: "15.99€", "15.99 €", "€ 15.99", "€15.99", "$15.99", etc.
-  const moneyRegex = /[€$£]\s*(\d+[\.,]\d{1,2})|(\d+[\.,]\d{1,2})\s*[€$£]/g;
+  // Detecta: "15.99€", "15.99 €", "€ 15.99", "€15.99", "$15.99", "EUR 15.99", etc.
+  const moneyRegex = /[€$£]\s*(\d+[\.,]\d{1,2})|(\d+[\.,]\d{1,2})\s*[€$£]|(?:EUR|USD|GBP)\s*(\d+[\.,]\d{1,2})/g;
   let m;
   while ((m = moneyRegex.exec(text)) !== null) {
-    const raw = m[1] || m[2];
-    if (!raw) continue;
+    const raw = m[1] || m[2] || m[3];
+    if (!raw || looksLikeDate(raw)) continue;
     const num = parseMoney(raw);
     if (!isNaN(num) && num > 0 && num < 100000) allAmounts.push(num);
   }
 
-  // === 3) Match con contexto "Total" ===
+  // === 2) BACKUP: si NO hay importes con símbolo, buscar contexto "Total" ===
+  // Pero con MISMA LÍNEA o línea siguiente (no buscar global)
+  const lines = text.split('\n').map(l => l.trim());
   const totalCandidates: number[] = [];
-  for (const p of totalPatterns) {
-    let mt;
-    while ((mt = p.exec(text)) !== null) {
-      const num = parseMoney(mt[1]);
-      if (!isNaN(num) && num > 0 && num < 100000) totalCandidates.push(num);
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    // Líneas que mencionan "Total" o "Importe"
+    if (/total|importe.*total|importe.*pagar|grand\s*total/i.test(line)) {
+      // Buscar número en esta línea o las siguientes 3
+      for (let j = i; j < Math.min(i + 4, lines.length); j++) {
+        const target = lines[j];
+        const numMatches = target.matchAll(/(\d+[\.,]\d{1,2})/g);
+        for (const nm of numMatches) {
+          const raw = nm[1];
+          if (looksLikeDate(raw)) continue;
+          const num = parseMoney(raw);
+          if (!isNaN(num) && num > 0.5 && num < 100000) totalCandidates.push(num);
+        }
+      }
     }
   }
 
-  if (totalCandidates.length > 0) {
-    // El último candidato suele ser el total final
-    total = totalCandidates[totalCandidates.length - 1];
-  } else if (allAmounts.length > 0) {
-    // Sin contexto: usar el mayor
+  // === 3) Decidir el total ===
+  if (allAmounts.length > 0) {
+    // Si hay importes con €/$, usar el MAYOR (suele ser el total)
     total = Math.max(...allAmounts);
+  } else if (totalCandidates.length > 0) {
+    // Sin símbolo de moneda: usar el último candidato cerca de "Total"
+    total = totalCandidates[totalCandidates.length - 1];
   }
 
   // === 4) IVA detection ===
