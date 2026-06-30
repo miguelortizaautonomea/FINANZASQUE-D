@@ -282,22 +282,49 @@ export default function Dashboard() {
     return new File([blob], `${baseName}.pdf`, { type: 'application/pdf' });
   };
 
-  // 📸 Handler para FOTO: convierte a PDF y lo guarda como factura (sin OCR)
-  // El usuario rellena los datos manualmente. Al guardar, el PDF va a Drive con el nombre correcto.
+  // 📸 Handler para FOTO: hace OCR + convierte a PDF + autorellena campos
   const handlePhotoUpload = async (file: File, type: 'income' | 'expense') => {
     setAnalyzingPDF(true);
     setPdfAnalysisError('');
     try {
-      // Convertir foto a PDF (con jsPDF en cliente)
+      // 1) Convertir la foto a PDF (para guardar)
       const pdfFile = await convertImageToPDF(file);
-      // Guardar el PDF generado para que el flujo de "Guardar" lo suba a Drive
       setSelectedFile(pdfFile);
-      // No mostrar error: el usuario rellenará los datos a mano
-      setAnalyzingPDF(false);
-      showToast('📸 Foto convertida a PDF. Rellena los datos y guarda.', 'success');
+
+      // 2) Hacer OCR de la imagen original (mejor que del PDF)
+      const fd = new FormData();
+      fd.append('file', file);
+      const ocrRes = await fetch('/api/analyze-image', {
+        method: 'POST',
+        body: fd,
+      });
+      const result = await ocrRes.json();
+
+      if (!ocrRes.ok || !result.success) {
+        // OCR falló: pero el PDF SÍ se guardó, solo hay que rellenar a mano
+        setPdfAnalysisError('📸 Foto guardada. No se pudieron leer los datos, rellénalos a mano.');
+        showToast('⚠️ ' + (result.error || 'OCR falló - rellena los datos a mano'), 'error');
+        setAnalyzingPDF(false);
+        return;
+      }
+
+      const data = result.data;
+      // 3) Auto-rellenar lo que se haya podido extraer
+      setFormData((prev) => ({
+        ...prev,
+        number: data.invoiceNumber || prev.number,
+        company: data.company || prev.company,
+        description: data.description || prev.description,
+        amount: data.amount?.toString() || prev.amount,
+        amountWithoutVAT: data.amountWithoutVAT?.toString() || prev.amountWithoutVAT,
+        ivaPercent: data.ivaPercent !== undefined ? data.ivaPercent.toString() : '21',
+      }));
+
+      showToast('✅ Foto analizada — revisa los datos antes de guardar', 'success');
     } catch (e: any) {
       setPdfAnalysisError('Error procesando la foto: ' + (e.message || 'desconocido'));
       showToast('❌ Error procesando la foto', 'error');
+    } finally {
       setAnalyzingPDF(false);
     }
   };
