@@ -244,41 +244,57 @@ export default function Dashboard() {
   // Función para analizar un PDF y autorrellenar el formulario
   // Extrae: Número de factura, Importe (bruto), IVA (21% o 0%)
   // 📸 Convierte una imagen (foto de cámara) en un PDF con jsPDF
-  // Usado para subir facturas desde móvil
+  // 🔄 Aplica la rotación EXIF automáticamente para que NO salga torcida
   const convertImageToPDF = async (imageFile: File): Promise<File> => {
     const { jsPDF } = await import('jspdf');
-    // Leer la imagen como dataURL
-    const dataUrl = await new Promise<string>((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(reader.result as string);
-      reader.onerror = reject;
-      reader.readAsDataURL(imageFile);
+
+    // 🔄 USAR createImageBitmap con 'imageOrientation: from-image'
+    // Esto aplica los metadatos EXIF de orientación automáticamente
+    // y devuelve dimensiones correctas (ya rotadas si hace falta)
+    let bitmap: ImageBitmap;
+    try {
+      bitmap = await createImageBitmap(imageFile, { imageOrientation: 'from-image' });
+    } catch (e) {
+      // Fallback: si el navegador no soporta imageOrientation, sin rotación EXIF
+      bitmap = await createImageBitmap(imageFile);
+    }
+
+    // Dibujar la imagen en un canvas (ya con orientación correcta)
+    const canvas = document.createElement('canvas');
+    canvas.width = bitmap.width;
+    canvas.height = bitmap.height;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) throw new Error('No se pudo crear canvas');
+    ctx.drawImage(bitmap, 0, 0);
+    // Convertir canvas a dataURL JPEG (mejor compresión que PNG)
+    const dataUrl = canvas.toDataURL('image/jpeg', 0.92);
+
+    // Crear PDF A4 con orientación según las dimensiones REALES (ya corregidas EXIF)
+    const isLandscape = bitmap.width > bitmap.height;
+    const pdf = new jsPDF({
+      unit: 'mm',
+      format: 'a4',
+      orientation: isLandscape ? 'landscape' : 'portrait'
     });
-    // Cargar imagen para obtener dimensiones
-    const img = await new Promise<HTMLImageElement>((resolve, reject) => {
-      const i = new Image();
-      i.onload = () => resolve(i);
-      i.onerror = reject;
-      i.src = dataUrl;
-    });
-    // Crear PDF A4 con proporción de la foto
-    const pdf = new jsPDF({ unit: 'mm', format: 'a4', orientation: img.width > img.height ? 'landscape' : 'portrait' });
     const pageW = pdf.internal.pageSize.getWidth();
     const pageH = pdf.internal.pageSize.getHeight();
     const margin = 10;
     const maxW = pageW - margin * 2;
     const maxH = pageH - margin * 2;
-    // Calcular dimensiones manteniendo proporción
-    const ratio = Math.min(maxW / img.width, maxH / img.height);
-    const w = img.width * ratio;
-    const h = img.height * ratio;
+    // Mantener proporción de la foto
+    const ratio = Math.min(maxW / bitmap.width, maxH / bitmap.height);
+    const w = bitmap.width * ratio;
+    const h = bitmap.height * ratio;
     const x = (pageW - w) / 2;
     const y = (pageH - h) / 2;
-    // Detectar tipo de imagen
-    const imgType = imageFile.type.includes('png') ? 'PNG' : 'JPEG';
-    pdf.addImage(dataUrl, imgType, x, y, w, h);
+
+    pdf.addImage(dataUrl, 'JPEG', x, y, w, h);
+
+    // Liberar memoria del bitmap
+    bitmap.close?.();
+
     const blob = pdf.output('blob');
-    const baseName = imageFile.name.replace(/\.(jpg|jpeg|png|heic|webp)$/i, '');
+    const baseName = imageFile.name.replace(/\.(jpg|jpeg|png|heic|heif|webp)$/i, '');
     return new File([blob], `${baseName}.pdf`, { type: 'application/pdf' });
   };
 
