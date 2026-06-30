@@ -243,54 +243,69 @@ export default function Dashboard() {
 
   // Función para analizar un PDF y autorrellenar el formulario
   // Extrae: Número de factura, Importe (bruto), IVA (21% o 0%)
-  // 📸 Convierte una imagen (foto de cámara) en un PDF con jsPDF
-  // 🔄 Aplica la rotación EXIF automáticamente para que NO salga torcida
+  // 📸 Convierte una foto en PDF con jsPDF + rotación automática
+  // 🔄 Si la foto viene en horizontal (sensor de móvil), la gira -90° (sentido antihorario)
   const convertImageToPDF = async (imageFile: File): Promise<File> => {
     const { jsPDF } = await import('jspdf');
 
-    // 🔄 USAR createImageBitmap con 'imageOrientation: from-image'
-    // Esto aplica los metadatos EXIF de orientación automáticamente
-    // y devuelve dimensiones correctas (ya rotadas si hace falta)
+    // Cargar la imagen
     let bitmap: ImageBitmap;
     try {
       bitmap = await createImageBitmap(imageFile, { imageOrientation: 'from-image' });
     } catch (e) {
-      // Fallback: si el navegador no soporta imageOrientation, sin rotación EXIF
       bitmap = await createImageBitmap(imageFile);
     }
 
-    // Dibujar la imagen en un canvas (ya con orientación correcta)
+    // 🔄 ROTACIÓN INTELIGENTE
+    // Si la foto viene en horizontal (ancho > alto), la rotamos -90° (antihorario)
+    // porque seguramente es una foto vertical mal orientada por el sensor móvil
+    const shouldRotate = bitmap.width > bitmap.height;
+
+    // Crear canvas con las dimensiones FINALES (intercambiadas si se rota)
     const canvas = document.createElement('canvas');
-    canvas.width = bitmap.width;
-    canvas.height = bitmap.height;
+    if (shouldRotate) {
+      canvas.width = bitmap.height;
+      canvas.height = bitmap.width;
+    } else {
+      canvas.width = bitmap.width;
+      canvas.height = bitmap.height;
+    }
     const ctx = canvas.getContext('2d');
     if (!ctx) throw new Error('No se pudo crear canvas');
-    ctx.drawImage(bitmap, 0, 0);
-    // Convertir canvas a dataURL JPEG (mejor compresión que PNG)
-    const dataUrl = canvas.toDataURL('image/jpeg', 0.92);
 
-    // Crear PDF A4 con orientación según las dimensiones REALES (ya corregidas EXIF)
-    const isLandscape = bitmap.width > bitmap.height;
+    if (shouldRotate) {
+      // Rotar -90° (antihorario) → traslada + rotate + draw
+      ctx.translate(0, canvas.height);
+      ctx.rotate(-Math.PI / 2);
+      ctx.drawImage(bitmap, 0, 0);
+    } else {
+      // No rotar, dibujar tal cual
+      ctx.drawImage(bitmap, 0, 0);
+    }
+
+    const dataUrl = canvas.toDataURL('image/jpeg', 0.92);
+    const finalW = canvas.width;
+    const finalH = canvas.height;
+
+    // Crear PDF A4
     const pdf = new jsPDF({
       unit: 'mm',
       format: 'a4',
-      orientation: isLandscape ? 'landscape' : 'portrait'
+      orientation: finalW > finalH ? 'landscape' : 'portrait',
     });
     const pageW = pdf.internal.pageSize.getWidth();
     const pageH = pdf.internal.pageSize.getHeight();
     const margin = 10;
     const maxW = pageW - margin * 2;
     const maxH = pageH - margin * 2;
-    // Mantener proporción de la foto
-    const ratio = Math.min(maxW / bitmap.width, maxH / bitmap.height);
-    const w = bitmap.width * ratio;
-    const h = bitmap.height * ratio;
+    const ratio = Math.min(maxW / finalW, maxH / finalH);
+    const w = finalW * ratio;
+    const h = finalH * ratio;
     const x = (pageW - w) / 2;
     const y = (pageH - h) / 2;
 
     pdf.addImage(dataUrl, 'JPEG', x, y, w, h);
 
-    // Liberar memoria del bitmap
     bitmap.close?.();
 
     const blob = pdf.output('blob');
