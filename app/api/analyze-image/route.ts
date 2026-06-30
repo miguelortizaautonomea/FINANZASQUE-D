@@ -143,9 +143,13 @@ function parseMoney(raw: string): number {
   return parseFloat(s);
 }
 
-// Detecta si un string parece una fecha tipo "03.06.2026" o "03/06/26" → ignorar como monto
-function looksLikeDate(s: string): boolean {
-  return /^\d{1,2}[\.\/-]\d{1,2}([\.\/-]\d{2,4})?$/.test(s.trim());
+// Detecta si un número con formato N.NN es realmente parte de una fecha N.NN.YYYY
+// Pasamos el texto completo y la posición del match para revisar el contexto
+function isFromDate(text: string, matchPos: number, matchStr: string): boolean {
+  // Buscar lo que viene inmediatamente después del match
+  const after = text.substring(matchPos + matchStr.length, matchPos + matchStr.length + 6);
+  // Si lo que sigue es .YYYY o /YYYY o -YYYY, es una fecha
+  return /^[\.\/-]\d{2,4}/.test(after);
 }
 
 function extractAmount(text: string): { total: number | null; base: number | null; vat: number | null; ivaPercent: number } {
@@ -161,26 +165,26 @@ function extractAmount(text: string): { total: number | null; base: number | nul
   let m;
   while ((m = moneyRegex.exec(text)) !== null) {
     const raw = m[1] || m[2] || m[3];
-    if (!raw || looksLikeDate(raw)) continue;
+    if (!raw) continue;
+    // Verificar que NO sea parte de una fecha (ej: 03.06.2026)
+    if (isFromDate(text, m.index, m[0])) continue;
     const num = parseMoney(raw);
     if (!isNaN(num) && num > 0 && num < 100000) allAmounts.push(num);
   }
 
   // === 2) BACKUP: si NO hay importes con símbolo, buscar contexto "Total" ===
-  // Pero con MISMA LÍNEA o línea siguiente (no buscar global)
   const lines = text.split('\n').map(l => l.trim());
   const totalCandidates: number[] = [];
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
-    // Líneas que mencionan "Total" o "Importe"
     if (/total|importe.*total|importe.*pagar|grand\s*total/i.test(line)) {
-      // Buscar número en esta línea o las siguientes 3
       for (let j = i; j < Math.min(i + 4, lines.length); j++) {
         const target = lines[j];
         const numMatches = target.matchAll(/(\d+[\.,]\d{1,2})/g);
         for (const nm of numMatches) {
           const raw = nm[1];
-          if (looksLikeDate(raw)) continue;
+          // Verificar que el número en el target original no sea parte de fecha
+          if (isFromDate(target, nm.index!, raw)) continue;
           const num = parseMoney(raw);
           if (!isNaN(num) && num > 0.5 && num < 100000) totalCandidates.push(num);
         }
