@@ -31,50 +31,80 @@ function extractInvoiceNumber(text: string): string | null {
   return null;
 }
 
+// Mi nombre y datos personales (para filtrar y NO confundirlo con el vendedor)
+const MY_NAME_REGEX = /miguel\s*[áa]ngel?\s*ortiz|miguel\.?ortiz|49549728T/i;
+
 function extractCompany(text: string): string | null {
   const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
 
-  // Conocidas (rápido)
-  const KNOWN = ['mercadona', 'carrefour', 'lidl', 'aldi', 'dia', 'eroski', 'consum',
-    'amazon', 'el corte ingles', 'media markt', 'decathlon', 'leroy merlin', 'ikea',
-    'apple', 'google', 'microsoft', 'meta', 'netflix', 'spotify', 'gohighlevel',
-    'highlevel', 'stripe', 'openai', 'chatgpt', 'claude', 'anthropic', 'railway',
-    'smartlead', 'slack', 'zapmail', 'twilio', 'verificado meta', 'mailerlite',
-    'circle.so', 'circle club', 'wernells', 'retell', 'serendipia',
-    'repsol', 'cepsa', 'shell', 'bp', 'galp', 'mcdonald', 'burger king', 'kfc',
-    'starbucks', 'dominos', 'telepizza'];
+  // 1) Empresas conocidas (incluido "amazon" via dominio amzn)
+  const KNOWN: [string, string][] = [
+    ['mercadona', 'Mercadona'], ['carrefour', 'Carrefour'], ['lidl', 'Lidl'],
+    ['aldi', 'Aldi'], ['eroski', 'Eroski'], ['consum', 'Consum'],
+    ['amazon', 'Amazon'], ['amzn', 'Amazon'], ['el corte ingles', 'El Corte Inglés'],
+    ['media markt', 'Media Markt'], ['decathlon', 'Decathlon'],
+    ['leroy merlin', 'Leroy Merlin'], ['ikea', 'IKEA'],
+    ['apple.com', 'Apple'], ['itunes', 'Apple'], ['app store', 'Apple'],
+    ['google workspace', 'Google Workspace'], ['workspace', 'Google Workspace'],
+    ['meta platforms', 'Verificado Meta'], ['verificado meta', 'Verificado Meta'],
+    ['netflix', 'Netflix'], ['spotify', 'Spotify'],
+    ['gohighlevel', 'GoHighLevel'], ['highlevel', 'GoHighLevel'], ['msgsndr', 'GoHighLevel'],
+    ['stripe.com', 'Stripe'], ['stripe', 'Stripe'],
+    ['openai', 'ChatGPT'], ['chatgpt', 'ChatGPT'],
+    ['claude.ai', 'Claude'], ['anthropic', 'Claude'],
+    ['railway.com', 'Railway'], ['railway corp', 'Railway'],
+    ['smartlead', 'Smartlead'], ['slack', 'Slack'],
+    ['zapmail', 'Zapmail'], ['twilio', 'Twilio'],
+    ['mailerlite', 'MailerLite'], ['retell', 'Retell AI'],
+    ['circle.so', 'Circle Club'], ['circle club', 'Circle Club'],
+    ['wernells', 'Wernells Center'],
+    ['serendipia', 'Serendipia LLC'], ['theplaze', 'The Plaze'],
+    ['repsol', 'Repsol'], ['cepsa', 'Cepsa'], ['shell', 'Shell'],
+    ['mcdonald', 'McDonalds'], ['burger king', 'Burger King'],
+    ['starbucks', 'Starbucks'], ['telepizza', 'Telepizza'],
+    ['n8n', 'N8N'],
+  ];
 
   const lowerText = text.toLowerCase();
-  for (const k of KNOWN) {
-    if (lowerText.includes(k)) {
-      // Devolver con la capitalización original aproximada
-      const idx = lowerText.indexOf(k);
-      const orig = text.substring(idx, idx + k.length);
-      return orig.charAt(0).toUpperCase() + orig.slice(1);
+  for (const [k, display] of KNOWN) {
+    if (lowerText.includes(k)) return display;
+  }
+
+  // 2) Buscar "Sold by", "Vendido por", "From:", "De:"
+  const vendorPatterns = [
+    /(?:sold\s*by|vendido\s*por|vendor|vendedor)[:\s]+([A-Z][A-Za-z0-9&\s\.\-]{3,80})/i,
+    /(?:from|de|emitida\s*por)[:\s]+([A-Z][A-Za-z0-9&\s\.\-]{3,80}\s+(?:S\.?L\.?|S\.?A\.?|SL|SA|SLU|INC\.?|LLC\.?|LTD\.?|GmbH|B\.?V\.?|S\.?R\.?L\.?))/i,
+  ];
+  for (const p of vendorPatterns) {
+    const m = text.match(p);
+    if (m && m[1] && !MY_NAME_REGEX.test(m[1])) {
+      let c = m[1].trim().replace(/[\n\r].*$/, '').trim();
+      if (c.length >= 3 && c.length <= 80) return c.substring(0, 60);
     }
   }
 
-  // Patterns de razón social
+  // 3) Patrón de razón social (S.L., S.A., LLC...)
   const companyPatterns = [
-    /^([A-Z][A-Za-z0-9&\s,\.\-]{2,80}(?:\s+S\.?L\.?(?:U\.?)?|\s+S\.?A\.?|\s+SL|\s+SA|\s+SLU|\s+INC\.?|\s+LLC\.?|\s+LTD\.?))/,
+    /([A-Z][A-Za-z0-9&\s,\.\-]{2,80}(?:\s+S\.?L\.?(?:U\.?)?|\s+S\.?A\.?|\s+SL|\s+SA|\s+SLU|\s+INC\.?|\s+LLC\.?|\s+LTD\.?|\s+GmbH|\s+B\.?V\.?|\s+S\.?R\.?L\.?))/,
   ];
-
-  for (let i = 0; i < Math.min(lines.length, 8); i++) {
+  for (let i = 0; i < Math.min(lines.length, 25); i++) {
     const line = lines[i];
     if (/^[\d\s.,€%/\-+]+$/.test(line)) continue;
     if (line.length < 3 || line.length > 100) continue;
+    if (MY_NAME_REGEX.test(line)) continue; // saltar mi nombre
     for (const p of companyPatterns) {
       const m = line.match(p);
       if (m && m[1]) return m[1].trim();
     }
   }
 
-  // Fallback: primera línea con letras
-  for (const line of lines.slice(0, 5)) {
-    if (line.length >= 3 && line.length <= 80 && /[A-Za-z]/.test(line) &&
-        !/^(factura|invoice|fecha|date|total|ticket|importe)/i.test(line)) {
-      return line.substring(0, 50);
-    }
+  // 4) Fallback: primera línea con letras que NO sea mi nombre o etiquetas
+  for (const line of lines.slice(0, 8)) {
+    if (line.length < 3 || line.length > 80) continue;
+    if (!/[A-Za-z]/.test(line)) continue;
+    if (MY_NAME_REGEX.test(line)) continue;
+    if (/^(factura|invoice|fecha|date|total|ticket|importe|customer|billing|delivery|sold|vendor|recipient|cliente|destinatario|page|paid)/i.test(line)) continue;
+    return line.substring(0, 50);
   }
   return null;
 }
@@ -90,51 +120,92 @@ function extractDescription(text: string): string | null {
   return null;
 }
 
+// Normaliza un número que puede tener . o , como decimal
+function parseMoney(raw: string): number {
+  if (!raw) return NaN;
+  let s = raw.trim().replace(/\s/g, '');
+  const hasDot = s.includes('.');
+  const hasComma = s.includes(',');
+  if (hasDot && hasComma) {
+    // 1.500,75 (EU) o 1,500.75 (US): el último separador es decimal
+    const lastDot = s.lastIndexOf('.');
+    const lastComma = s.lastIndexOf(',');
+    if (lastDot > lastComma) return parseFloat(s.replace(/,/g, ''));
+    return parseFloat(s.replace(/\./g, '').replace(',', '.'));
+  }
+  // Solo coma o solo punto: tratar como decimal si tiene 1-2 dígitos detrás
+  if (hasComma) {
+    const parts = s.split(',');
+    if (parts.length === 2 && parts[1].length <= 2) return parseFloat(s.replace(',', '.'));
+    // Si tiene 3 dígitos detrás, es miles → eliminar
+    if (parts.length === 2 && parts[1].length === 3) return parseFloat(s.replace(',', ''));
+  }
+  return parseFloat(s);
+}
+
 function extractAmount(text: string): { total: number | null; base: number | null; vat: number | null; ivaPercent: number } {
   let total: number | null = null;
   let base: number | null = null;
   let vat: number | null = null;
 
-  // Buscar TODOS los números con € y quedarse con el mayor (probablemente el total)
+  // === 1) Buscar TOTAL con contexto (prioridad alta) ===
+  // Acepta "Total: 15.99 €", "Total payable € 15.99", "Total a pagar 23,50€", etc.
+  const totalPatterns = [
+    /total\s*(?:payable|pendiente|a\s*pagar|factura|importe|due|charged|paid)?\s*[:\s]*[€$£]?\s*([\d]+[\.,]\d{1,3}|\d+)\s*[€$£]?/gi,
+    /TOTAL\s*[:\s]*[€$£]?\s*([\d]+[\.,]\d{1,3}|\d+)\s*[€$£]?/gi,
+    /importe\s*(?:total|a\s*pagar)\s*[:\s]*[€$£]?\s*([\d]+[\.,]\d{1,3}|\d+)/gi,
+    /grand\s*total\s*[:\s]*[€$£]?\s*([\d]+[\.,]\d{1,3}|\d+)/gi,
+  ];
+
+  // === 2) Buscar TODOS los importes con € o $ (también con espacios) ===
   const allAmounts: number[] = [];
-  const moneyRegex = /([\d]+[\.,]?\d{0,2})\s*€|€\s*([\d]+[\.,]?\d{0,2})|\$\s*([\d]+[\.,]?\d{0,2})|([\d]+[\.,]\d{2})/g;
+  // Detecta: "15.99€", "15.99 €", "€ 15.99", "€15.99", "$15.99", etc.
+  const moneyRegex = /[€$£]\s*(\d+[\.,]\d{1,2})|(\d+[\.,]\d{1,2})\s*[€$£]/g;
   let m;
   while ((m = moneyRegex.exec(text)) !== null) {
-    const raw = m[1] || m[2] || m[3] || m[4];
+    const raw = m[1] || m[2];
     if (!raw) continue;
-    const num = parseFloat(raw.replace(',', '.'));
-    if (!isNaN(num) && num > 0 && num < 100000) {
-      allAmounts.push(num);
+    const num = parseMoney(raw);
+    if (!isNaN(num) && num > 0 && num < 100000) allAmounts.push(num);
+  }
+
+  // === 3) Match con contexto "Total" ===
+  const totalCandidates: number[] = [];
+  for (const p of totalPatterns) {
+    let mt;
+    while ((mt = p.exec(text)) !== null) {
+      const num = parseMoney(mt[1]);
+      if (!isNaN(num) && num > 0 && num < 100000) totalCandidates.push(num);
     }
   }
 
-  // Buscar total con contexto
-  const totalContextRegex = /total[\s:]*([\d\.,]+)/gi;
-  let mt;
-  while ((mt = totalContextRegex.exec(text)) !== null) {
-    const num = parseFloat(mt[1].replace(',', '.'));
-    if (!isNaN(num) && num > 0 && num < 100000) {
-      total = num; // último match (suele ser el total final)
-    }
-  }
-
-  // Si no hay match con "total", coger el mayor de todos
-  if (total === null && allAmounts.length > 0) {
+  if (totalCandidates.length > 0) {
+    // El último candidato suele ser el total final
+    total = totalCandidates[totalCandidates.length - 1];
+  } else if (allAmounts.length > 0) {
+    // Sin contexto: usar el mayor
     total = Math.max(...allAmounts);
   }
 
-  // IVA detection
-  const has21 = /(?:iva|vat).*21\s*%|21\s*%.*(?:iva|vat)/i.test(text);
-  const has10 = /(?:iva|vat).*10\s*%|10\s*%.*(?:iva|vat)/i.test(text);
-  const has4 = /(?:iva|vat).*4\s*%|4\s*%.*(?:iva|vat)/i.test(text);
+  // === 4) IVA detection ===
+  const has21 = /21\s*%|iva.*21|vat.*21/i.test(text);
+  const has10 = /10\s*%|iva.*10|vat.*10/i.test(text);
+  const has4 = /\b4\s*%|iva.*4\b|vat.*4\b/i.test(text);
 
   let ivaPercent = 0;
   if (has21) ivaPercent = 21;
   else if (has10) ivaPercent = 10;
   else if (has4) ivaPercent = 4;
 
+  // === 5) Buscar base imponible explícita ===
+  const baseMatch = text.match(/(?:base\s*imponible|subtotal|importe\s*neto|net\s*amount)\s*[:\s]*[€$£]?\s*([\d]+[\.,]\d{1,3}|\d+)/i);
+  if (baseMatch) {
+    const b = parseMoney(baseMatch[1]);
+    if (!isNaN(b) && b > 0) base = b;
+  }
+
   if (ivaPercent > 0 && total !== null) {
-    base = total / (1 + ivaPercent / 100);
+    if (base === null) base = total / (1 + ivaPercent / 100);
     vat = total - base;
   } else if (total !== null) {
     base = total;
