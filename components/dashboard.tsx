@@ -3851,8 +3851,8 @@ export default function Dashboard() {
 
       {/* Income Dialog - Simplificado */}
       {showIncomeDialog && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50 backdrop-blur-sm">
-          <div className="bg-zinc-900 border border-emerald-500/30 rounded-2xl shadow-2xl shadow-emerald-500/10 max-w-md w-full p-8">
+        <div className="fixed inset-0 bg-black/60 flex items-start md:items-center justify-center p-0 md:p-4 z-50 backdrop-blur-sm overflow-y-auto">
+          <div className="bg-zinc-900 border border-emerald-500/30 md:rounded-2xl shadow-2xl shadow-emerald-500/10 max-w-md w-full p-5 md:p-8 my-0 md:my-4 max-h-screen md:max-h-[95vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-6">
               <div className="flex items-center gap-3">
                 <div className="bg-gradient-to-br from-emerald-500 to-teal-600 p-2.5 rounded-xl shadow-lg shadow-emerald-500/20">
@@ -4081,8 +4081,8 @@ export default function Dashboard() {
 
       {/* Expense Dialog */}
       {showExpenseDialog && (
-        <div className="fixed inset-0 bg-black bg-opacity-30 flex items-center justify-center p-4 z-50 backdrop-blur-sm">
-          <div className="bg-zinc-900 border border-zinc-800 rounded-xl shadow-2xl max-w-md w-full p-8">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-start md:items-center justify-center p-0 md:p-4 z-50 backdrop-blur-sm overflow-y-auto">
+          <div className="bg-zinc-900 border border-zinc-800 md:rounded-xl shadow-2xl max-w-md w-full p-5 md:p-8 my-0 md:my-4 max-h-screen md:max-h-[95vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-6">
               <div className="flex items-center gap-3">
                 <div className="bg-gradient-to-br from-rose-500 to-pink-600 p-2.5 rounded-xl shadow-lg shadow-rose-500/20">
@@ -4364,8 +4364,8 @@ export default function Dashboard() {
         const isIncome = editingInvoice?.type === 'income';
         const ringColor = isIncome ? 'emerald' : 'rose';
         return (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50 backdrop-blur-sm">
-          <div className={`bg-zinc-900 border border-${ringColor}-500/30 rounded-2xl shadow-2xl shadow-${ringColor}-500/10 max-w-md w-full p-8`}>
+        <div className="fixed inset-0 bg-black/60 flex items-start md:items-center justify-center p-0 md:p-4 z-50 backdrop-blur-sm overflow-y-auto">
+          <div className={`bg-zinc-900 border border-${ringColor}-500/30 md:rounded-2xl shadow-2xl shadow-${ringColor}-500/10 max-w-md w-full p-5 md:p-8 my-0 md:my-4 max-h-screen md:max-h-[95vh] overflow-y-auto`}>
             <div className="flex items-center justify-between mb-6">
               <div className="flex items-center gap-3">
                 <div className={`bg-gradient-to-br from-${ringColor}-500 to-${isIncome ? 'teal' : 'pink'}-600 p-2.5 rounded-xl shadow-lg shadow-${ringColor}-500/20`}>
@@ -4574,8 +4574,8 @@ export default function Dashboard() {
       {/* Import Dialog */}
       {/* Issue Invoice Dialog - Emitir nueva factura */}
       {showIssueDialog && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50 backdrop-blur-sm overflow-y-auto">
-          <div className="bg-zinc-900 border border-blue-500/30 rounded-2xl shadow-2xl shadow-blue-500/10 max-w-2xl w-full p-8 my-8">
+        <div className="fixed inset-0 bg-black/60 flex items-start md:items-center justify-center p-0 md:p-4 z-50 backdrop-blur-sm overflow-y-auto">
+          <div className="bg-zinc-900 border border-blue-500/30 md:rounded-2xl shadow-2xl shadow-blue-500/10 max-w-2xl w-full p-5 md:p-8 my-0 md:my-8 max-h-screen md:max-h-[95vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-6">
               <div className="flex items-center gap-3">
                 <div className="bg-gradient-to-br from-blue-500 to-indigo-600 p-2.5 rounded-xl shadow-lg shadow-blue-500/20">
