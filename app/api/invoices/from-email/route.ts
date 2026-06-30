@@ -466,6 +466,7 @@ export async function POST(req: NextRequest) {
       const dateStr = date || new Date().toISOString().split('T')[0];
       const monthShort = monthMap[dateStr.slice(5, 7)] || 'Sin';
       const cleanCompany = safeCleanCompany(company);
+      // Formato: "Mes-Número-Empresa-timestamp.pdf"
       const storageFileName = `${monthShort}-${invoiceNumber || 'X'}-${cleanCompany}-${Date.now()}.pdf`;
       const storagePath = `invoices/${storageFileName}`;
 
@@ -513,8 +514,11 @@ export async function POST(req: NextRequest) {
     if (driveWebhook) {
       try {
         const cleanCompany = safeCleanCompany(company);
-        // Usar finalNumber que ya tiene formato "N-Mes" (ej: "1-Jun")
-        const driveFileName = `${finalNumber}-${cleanCompany}.pdf`;
+        // finalNumber viene en formato "N-Mes" (ej: "1-Jun")
+        // Invertimos a "Mes-N-Empresa.pdf" → "Jun-1-Stripe.pdf"
+        const numMatch = finalNumber?.match(/^(\d+)-(\w+)$/);
+        const flippedNumber = numMatch ? `${numMatch[2]}-${numMatch[1]}` : finalNumber;
+        const driveFileName = `${flippedNumber}-${cleanCompany}.pdf`;
 
         const driveFormData = new FormData();
         const pdfBlob = new Blob([buffer], { type: 'application/pdf' });
@@ -535,7 +539,10 @@ export async function POST(req: NextRequest) {
 
     // Nombre del archivo listo para usar en n8n al subir a Drive
     // Formato: "1-Jun-Claude.pdf" (numero-mes-empresa)
-    const driveDisplayFileName = `${finalNumber}-${safeCleanCompany(company)}.pdf`;
+    // Nombre amigable para Drive en formato "Mes-N-Empresa.pdf"
+    const dispMatch = finalNumber?.match(/^(\d+)-(\w+)$/);
+    const dispFlipped = dispMatch ? `${dispMatch[2]}-${dispMatch[1]}` : finalNumber;
+    const driveDisplayFileName = `${dispFlipped}-${safeCleanCompany(company)}.pdf`;
 
     return NextResponse.json({
       success: true,

@@ -746,8 +746,11 @@ export default function Dashboard() {
     if (type === 'expense' && selectedFile && selectedFile.size > 0 && driveWebhook) {
       try {
         const cleanCompany = companyFinal.replace(/[^a-zA-Z0-9\s\-]/g, '').trim().substring(0, 50);
-        // Usar el número auto-generado (formato: "N-Mes-Empresa.pdf")
-        const driveFileName = `${newInvoice.number}-${cleanCompany}.pdf`;
+        // newInvoice.number viene en formato "N-Mes" (ej: "21-Jun")
+        // Invertimos a "Mes-N" para el nombre del archivo: "Jun-21-Empresa.pdf"
+        const numMatch = newInvoice.number?.match(/^(\d+)-(\w+)$/);
+        const flippedNumber = numMatch ? `${numMatch[2]}-${numMatch[1]}` : newInvoice.number;
+        const driveFileName = `${flippedNumber}-${cleanCompany}.pdf`;
 
         const driveFormData = new FormData();
         driveFormData.append('file', selectedFile, driveFileName);
