@@ -282,17 +282,22 @@ export default function Dashboard() {
     return new File([blob], `${baseName}.pdf`, { type: 'application/pdf' });
   };
 
-  // 📸 Handler para cuando el usuario selecciona una FOTO desde el modal
+  // 📸 Handler para FOTO: convierte a PDF y lo guarda como factura (sin OCR)
+  // El usuario rellena los datos manualmente. Al guardar, el PDF va a Drive con el nombre correcto.
   const handlePhotoUpload = async (file: File, type: 'income' | 'expense') => {
     setAnalyzingPDF(true);
     setPdfAnalysisError('');
     try {
-      // Convertir foto a PDF
+      // Convertir foto a PDF (con jsPDF en cliente)
       const pdfFile = await convertImageToPDF(file);
-      // Procesar como un PDF normal
-      await analyzePDF(pdfFile, type);
+      // Guardar el PDF generado para que el flujo de "Guardar" lo suba a Drive
+      setSelectedFile(pdfFile);
+      // No mostrar error: el usuario rellenará los datos a mano
+      setAnalyzingPDF(false);
+      showToast('📸 Foto convertida a PDF. Rellena los datos y guarda.', 'success');
     } catch (e: any) {
       setPdfAnalysisError('Error procesando la foto: ' + (e.message || 'desconocido'));
+      showToast('❌ Error procesando la foto', 'error');
       setAnalyzingPDF(false);
     }
   };
