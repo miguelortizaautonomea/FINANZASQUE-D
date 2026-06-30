@@ -30,6 +30,7 @@ import {
   Sun,
   Moon,
   Plus,
+  Camera,
 } from 'lucide-react';
 import {
   LineChart,
@@ -139,6 +140,8 @@ export default function Dashboard() {
   };
 
   const [activeView, setActiveView] = useState<ViewType>('dashboard');
+  // Estado para sidebar móvil
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [loading, setLoading] = useState(true);
   const [showIncomeDialog, setShowIncomeDialog] = useState(false);
@@ -240,6 +243,60 @@ export default function Dashboard() {
 
   // Función para analizar un PDF y autorrellenar el formulario
   // Extrae: Número de factura, Importe (bruto), IVA (21% o 0%)
+  // 📸 Convierte una imagen (foto de cámara) en un PDF con jsPDF
+  // Usado para subir facturas desde móvil
+  const convertImageToPDF = async (imageFile: File): Promise<File> => {
+    const { jsPDF } = await import('jspdf');
+    // Leer la imagen como dataURL
+    const dataUrl = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = reject;
+      reader.readAsDataURL(imageFile);
+    });
+    // Cargar imagen para obtener dimensiones
+    const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const i = new Image();
+      i.onload = () => resolve(i);
+      i.onerror = reject;
+      i.src = dataUrl;
+    });
+    // Crear PDF A4 con proporción de la foto
+    const pdf = new jsPDF({ unit: 'mm', format: 'a4', orientation: img.width > img.height ? 'landscape' : 'portrait' });
+    const pageW = pdf.internal.pageSize.getWidth();
+    const pageH = pdf.internal.pageSize.getHeight();
+    const margin = 10;
+    const maxW = pageW - margin * 2;
+    const maxH = pageH - margin * 2;
+    // Calcular dimensiones manteniendo proporción
+    const ratio = Math.min(maxW / img.width, maxH / img.height);
+    const w = img.width * ratio;
+    const h = img.height * ratio;
+    const x = (pageW - w) / 2;
+    const y = (pageH - h) / 2;
+    // Detectar tipo de imagen
+    const imgType = imageFile.type.includes('png') ? 'PNG' : 'JPEG';
+    pdf.addImage(dataUrl, imgType, x, y, w, h);
+    const blob = pdf.output('blob');
+    const baseName = imageFile.name.replace(/\.(jpg|jpeg|png|heic|webp)$/i, '');
+    return new File([blob], `${baseName}.pdf`, { type: 'application/pdf' });
+  };
+
+  // 📸 Handler para cuando el usuario selecciona una FOTO desde el modal
+  const handlePhotoUpload = async (file: File, type: 'income' | 'expense') => {
+    setAnalyzingPDF(true);
+    setPdfAnalysisError('');
+    try {
+      // Convertir foto a PDF
+      const pdfFile = await convertImageToPDF(file);
+      // Procesar como un PDF normal
+      await analyzePDF(pdfFile, type);
+    } catch (e: any) {
+      setPdfAnalysisError('Error procesando la foto: ' + (e.message || 'desconocido'));
+      setAnalyzingPDF(false);
+    }
+  };
+
   const analyzePDF = async (file: File, type: 'income' | 'expense') => {
     setAnalyzingPDF(true);
     setPdfAnalysisError('');
@@ -1898,7 +1955,15 @@ export default function Dashboard() {
     ];
 
     return (
-      <aside className="bg-zinc-950 text-white w-64 min-h-screen flex flex-col fixed left-0 top-0 z-50 border-r border-zinc-800/50">
+      <>
+        {/* Overlay para cerrar el sidebar móvil */}
+        {mobileSidebarOpen && (
+          <div
+            className="fixed inset-0 bg-black/60 z-40 md:hidden"
+            onClick={() => setMobileSidebarOpen(false)}
+          />
+        )}
+      <aside className={`bg-zinc-950 text-white w-64 min-h-screen flex flex-col fixed left-0 top-0 z-50 border-r border-zinc-800/50 transition-transform duration-300 ${mobileSidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}`}>
         {/* Logo */}
         <div className="p-6 border-b border-zinc-800/50">
           <div className="flex items-center gap-3">
@@ -1923,6 +1988,7 @@ export default function Dashboard() {
                 key={item.id}
                 onClick={() => {
                   setActiveView(item.id);
+                  setMobileSidebarOpen(false); // Cerrar sidebar móvil al navegar
                   // Al entrar a Fact. Ingresos/Gastos, resetear orden a "Nº Desc"
                   if (item.id === 'invoices-income' || item.id === 'invoices-expense') {
                     setInvoiceSortBy('number-desc');
@@ -1994,6 +2060,7 @@ export default function Dashboard() {
           </button>
         </div>
       </aside>
+      </>
     );
   };
 
@@ -2295,11 +2362,33 @@ export default function Dashboard() {
     <div className={`min-h-screen transition-colors ${theme === 'dark' ? 'bg-zinc-950' : 'bg-zinc-100'}`} data-theme={theme}>
       <Sidebar />
 
-      <div className="ml-64">
+      {/* Header móvil con botón hamburguesa - SOLO se muestra en móvil */}
+      <div className="md:hidden sticky top-0 z-30 bg-zinc-950/95 backdrop-blur-xl border-b border-zinc-800 flex items-center justify-between px-4 py-3">
+        <button
+          onClick={() => setMobileSidebarOpen(true)}
+          className="text-white p-2 rounded-lg hover:bg-zinc-800 transition-colors"
+          aria-label="Abrir menú"
+        >
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <line x1="3" y1="6" x2="21" y2="6"></line>
+            <line x1="3" y1="12" x2="21" y2="12"></line>
+            <line x1="3" y1="18" x2="21" y2="18"></line>
+          </svg>
+        </button>
+        <div className="flex items-center gap-2">
+          <div className="w-8 h-8 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-lg flex items-center justify-center">
+            <DollarSign size={18} className="text-white" />
+          </div>
+          <span className="text-white font-bold">FinanzApp</span>
+        </div>
+        <div className="w-10" /> {/* Spacer para centrar el logo */}
+      </div>
+
+      <div className="md:ml-64">
         {/* Header Premium */}
         {activeView === 'dashboard' && (
         <div className="bg-zinc-950/80 backdrop-blur-xl border-b border-zinc-800/50 sticky top-0 z-40">
-          <div className="max-w-7xl mx-auto px-8 py-5">
+          <div className="max-w-7xl mx-auto px-4 md:px-8 py-3 md:py-5">
             <div className="flex justify-between items-center">
               <div>
                 <h1 className="text-2xl font-bold text-white tracking-tight">Dashboard</h1>
@@ -2333,7 +2422,7 @@ export default function Dashboard() {
         </div>
       )}
 
-      <div className="max-w-7xl mx-auto px-6 py-8">
+      <div className="max-w-7xl mx-auto px-4 md:px-6 py-4 md:py-8">
         {loading && (
           <div className="bg-zinc-900 border border-blue-500/20 rounded-lg p-4 mb-8 text-center">
             <p className="text-blue-400 font-semibold">⏳ Cargando tus datos...</p>
@@ -3962,27 +4051,21 @@ export default function Dashboard() {
               </button>
             </div>
             <div className="space-y-4">
-              {/* Dropzone PDF - Auto-rellenar con IA */}
-              <div className="bg-gradient-to-br from-rose-500/5 to-zinc-900 border border-dashed border-rose-500/30 rounded-xl p-4 hover:border-rose-500/60 transition-all">
-                <label className="cursor-pointer block">
-                  <div className="flex items-center gap-3">
-                    <div className="bg-gradient-to-br from-rose-500 to-pink-600 p-2.5 rounded-lg shadow-lg shadow-rose-500/20 flex-shrink-0">
-                      {analyzingPDF ? (
-                        <RefreshCw size={18} className="text-white animate-spin" />
-                      ) : (
-                        <FileUp size={18} className="text-white" />
-                      )}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-semibold text-white">
-                        {analyzingPDF ? '🤖 Analizando PDF...' : '📄 Subir Factura PDF'}
-                      </p>
-                      <p className="text-[10px] text-zinc-500 truncate">
-                        {analyzingPDF ? 'Extrayendo datos automáticamente...' : 'Se autorrellenarán los campos al subir'}
-                      </p>
-                    </div>
-                    <span className="text-[10px] font-bold text-rose-400 bg-rose-500/10 border border-rose-500/30 px-2 py-1 rounded">AUTO</span>
+              {/* DUAL Dropzone: PDF + FOTO (Mobile) */}
+              <div className="grid grid-cols-2 gap-2">
+                {/* PDF */}
+                <label className="cursor-pointer bg-gradient-to-br from-rose-500/5 to-zinc-900 border border-dashed border-rose-500/30 rounded-xl p-3 hover:border-rose-500/60 transition-all flex flex-col items-center justify-center gap-2 min-h-[100px]">
+                  <div className="bg-gradient-to-br from-rose-500 to-pink-600 p-2 rounded-lg shadow-lg shadow-rose-500/20">
+                    {analyzingPDF ? (
+                      <RefreshCw size={18} className="text-white animate-spin" />
+                    ) : (
+                      <FileUp size={18} className="text-white" />
+                    )}
                   </div>
+                  <p className="text-xs font-semibold text-white text-center">
+                    📄 Subir PDF
+                  </p>
+                  <p className="text-[9px] text-zinc-500 text-center">Auto-rellena</p>
                   <input
                     type="file"
                     accept=".pdf"
@@ -3994,12 +4077,38 @@ export default function Dashboard() {
                     }}
                   />
                 </label>
-                {pdfAnalysisError && (
-                  <p className="text-xs text-rose-400 mt-2 flex items-center gap-1">
-                    <AlertCircle size={12} /> {pdfAnalysisError}
+
+                {/* FOTO (cámara móvil) */}
+                <label className="cursor-pointer bg-gradient-to-br from-blue-500/5 to-zinc-900 border border-dashed border-blue-500/30 rounded-xl p-3 hover:border-blue-500/60 transition-all flex flex-col items-center justify-center gap-2 min-h-[100px]">
+                  <div className="bg-gradient-to-br from-blue-500 to-cyan-600 p-2 rounded-lg shadow-lg shadow-blue-500/20">
+                    {analyzingPDF ? (
+                      <RefreshCw size={18} className="text-white animate-spin" />
+                    ) : (
+                      <Camera size={18} className="text-white" />
+                    )}
+                  </div>
+                  <p className="text-xs font-semibold text-white text-center">
+                    📸 Hacer Foto
                   </p>
-                )}
+                  <p className="text-[9px] text-zinc-500 text-center">Cámara → PDF</p>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    capture="environment"
+                    disabled={analyzingPDF}
+                    className="hidden"
+                    onChange={(e) => {
+                      const f = e.target.files?.[0];
+                      if (f) handlePhotoUpload(f, 'expense');
+                    }}
+                  />
+                </label>
               </div>
+              {pdfAnalysisError && (
+                <p className="text-xs text-rose-400 flex items-center gap-1">
+                  <AlertCircle size={12} /> {pdfAnalysisError}
+                </p>
+              )}
 
               {/* Banner Nº Factura Automático */}
               <div className="bg-emerald-500/5 border border-emerald-500/20 rounded-lg px-4 py-2.5 flex items-center justify-between">
