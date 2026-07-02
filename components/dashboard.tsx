@@ -731,9 +731,9 @@ export default function Dashboard() {
       return;
     }
 
-    // Validación: Fecha válida
-    if (!formData.date) {
-      showToast('❌ Por favor selecciona una Fecha', 'error');
+    // Validación: Fecha válida (formato YYYY-MM-DD)
+    if (!formData.date || !/^\d{4}-\d{2}-\d{2}$/.test(formData.date)) {
+      showToast('❌ Por favor selecciona una Fecha válida', 'error');
       return;
     }
 
@@ -1077,16 +1077,28 @@ export default function Dashboard() {
 
   // Auto-genera número para facturas de GASTO con formato "N-Mes"
   // Ej: "1-Jun", "2-Jun", "3-Jun"...
+  // ⚠️ Parsear la fecha manualmente para EVITAR problemas de zona horaria
   const getNextExpenseNumber = (dateString: string): string => {
-    const dateObj = new Date(dateString);
-    const year = dateObj.getFullYear();
-    const month = dateObj.getMonth() + 1;
+    // Fallback si la fecha viene vacía o inválida
+    if (!dateString || typeof dateString !== 'string') {
+      const now = new Date();
+      dateString = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    }
+
+    // Parsear "YYYY-MM-DD" directamente sin usar new Date() (evita conversión UTC → local)
+    const parts = dateString.split('-');
+    let year = parseInt(parts[0]) || new Date().getFullYear();
+    let month = parseInt(parts[1]) || (new Date().getMonth() + 1);
+
+    // Validar que el mes esté entre 1-12
+    if (month < 1 || month > 12) month = new Date().getMonth() + 1;
+
     const monthMap: Record<number, string> = {
       1: 'Ene', 2: 'Feb', 3: 'Mar', 4: 'Abr',
       5: 'May', 6: 'Jun', 7: 'Jul', 8: 'Ago',
       9: 'Sep', 10: 'Oct', 11: 'Nov', 12: 'Dic'
     };
-    const monthShort = monthMap[month];
+    const monthShort = monthMap[month] || '???';
     const monthPrefix = `${year}-${String(month).padStart(2, '0')}`;
 
     // Buscar facturas de gasto con factura del mismo mes
