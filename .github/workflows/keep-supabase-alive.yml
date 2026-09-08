@@ -1,0 +1,30 @@
+name: Keep Supabase Alive
+
+on:
+  schedule:
+    - cron: '0 6 */3 * *'
+  workflow_dispatch:
+
+jobs:
+  ping-supabase:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping Supabase REST API
+        run: |
+          RESPONSE=$(curl -s -w "\nHTTP:%{http_code}" --max-time 30 \
+            "https://cmjnvamxnregpuamoxxu.supabase.co/rest/v1/invoices?select=count&limit=1" \
+            -H "apikey: sb_publishable_m1kzzGncftRhSzj45JIcRQ_h9VTizgG" \
+            -H "Authorization: Bearer sb_publishable_m1kzzGncftRhSzj45JIcRQ_h9VTizgG")
+          echo "Response: $RESPONSE"
+          HTTP_CODE=$(echo "$RESPONSE" | grep -o 'HTTP:[0-9]*' | cut -d: -f2)
+          if [ "$HTTP_CODE" = "200" ]; then
+            echo "SUCCESS: Supabase alive (HTTP $HTTP_CODE)"
+          else
+            echo "FAILURE: Supabase not responding (HTTP $HTTP_CODE)"
+            exit 1
+          fi
+
+      - name: Ping panel Vercel
+        run: |
+          curl -s -o /dev/null -w "Panel HTTP: %{http_code}\n" --max-time 15 \
+            "https://finanzasque-d.vercel.app/" || true
