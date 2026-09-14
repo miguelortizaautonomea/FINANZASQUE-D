@@ -11,14 +11,14 @@ interface AnalyzedData {
   ivaPercent: number;
 }
 
-// Reutilizamos la lógica de extracción del endpoint analyze-pdf
+// Reutilizamos la l√≥gica de extracci√≥n del endpoint analyze-pdf
 function extractInvoiceNumber(text: string): string | null {
   const safeText = text || '';
   const patterns = [
-    /(?:factura|invoice)[\s\/]*(?:n[º°ºo]\.?|num(?:ero)?|nr\.?|#)\s*:?\s*([A-Z]*-?)?(\d+)/i,
-    /(?:n[º°ºo]\.?|num(?:ero)?|nr\.?)\s*(?:factura|invoice)?\s*:?\s*([A-Z]*-?)?(\d+)/i,
+    /(?:factura|invoice)[\s\/]*(?:n[¬∫¬∞¬∫o]\.?|num(?:ero)?|nr\.?|#)\s*:?\s*([A-Z]*-?)?(\d+)/i,
+    /(?:n[¬∫¬∞¬∫o]\.?|num(?:ero)?|nr\.?)\s*(?:factura|invoice)?\s*:?\s*([A-Z]*-?)?(\d+)/i,
     /(?:factura|invoice)\s*:\s*([A-Z]*-?)?(\d+)/i,
-    /n[º°ºo]\s*:?\s*([A-Z]*-?)?(\d+)/i,
+    /n[¬∫¬∞¬∫o]\s*:?\s*([A-Z]*-?)?(\d+)/i,
   ];
 
   for (const pattern of patterns) {
@@ -32,7 +32,7 @@ function extractInvoiceNumber(text: string): string | null {
 }
 
 // Diccionario de empresas conocidas (SaaS, servicios comunes)
-// Si se encuentra el keyword en el sender, filename o texto → devuelve el nombre amigable
+// Si se encuentra el keyword en el sender, filename o texto ‚Üí devuelve el nombre amigable
 const KNOWN_COMPANIES: Record<string, string> = {
   'anthropic': 'Claude',
   'claude.ai': 'Claude',
@@ -111,8 +111,8 @@ function detectKnownCompany(text: string, sender: string, filename: string): str
 
 /**
  * Extrae el nombre legible del remitente del email.
- * "Anthropic <billing@anthropic.com>" → "Anthropic"
- * "billing@stripe.com" → "Stripe"
+ * "Anthropic <billing@anthropic.com>" ‚Üí "Anthropic"
+ * "billing@stripe.com" ‚Üí "Stripe"
  */
 function extractSenderName(sender: string): string | null {
   if (!sender) return null;
@@ -124,7 +124,7 @@ function extractSenderName(sender: string): string | null {
       return name.substring(0, 50);
     }
   }
-  // Caso 2: solo email "billing@stripe.com" → "Stripe"
+  // Caso 2: solo email "billing@stripe.com" ‚Üí "Stripe"
   const emailMatch = sender.match(/@([a-z0-9\-]+)\.[a-z]+/i);
   if (emailMatch && emailMatch[1]) {
     const domain = emailMatch[1];
@@ -145,7 +145,7 @@ function extractCompany(text: string, filename: string): string {
 
   for (let i = 0; i < Math.min(lines.length, 25); i++) {
     const line = lines[i];
-    if (/^[\d\s.,€%/\-+]+$/.test(line)) continue;
+    if (/^[\d\s.,‚Ç¨%/\-+]+$/.test(line)) continue;
     if (line.length < 4 || line.length > 100) continue;
 
     for (const pattern of companyPatterns) {
@@ -154,9 +154,9 @@ function extractCompany(text: string, filename: string): string {
     }
   }
 
-  // Fallback: primera línea válida
+  // Fallback: primera l√≠nea v√°lida
   for (const line of lines.slice(0, 5)) {
-    if (line.length >= 4 && line.length <= 100 && !/^[\d\s.,€%/\-+]+$/.test(line) &&
+    if (line.length >= 4 && line.length <= 100 && !/^[\d\s.,‚Ç¨%/\-+]+$/.test(line) &&
         !/^(factura|invoice|fecha|date)/i.test(line)) {
       return line;
     }
@@ -173,7 +173,7 @@ function safeCleanCompany(value: string | undefined | null): string {
 
 function extractDescription(text: string): string | null {
   const safeText = text || '';
-  const m = safeText.match(/(?:concepto|descripci[oó]n|detalle|description|services?)[:\s]+([^\n\r]{5,200})/i);
+  const m = safeText.match(/(?:concepto|descripci[o√≥]n|detalle|description|services?)[:\s]+([^\n\r]{5,200})/i);
   if (m && m[1] && typeof m[1] === 'string') {
     let desc = m[1].trim().replace(/\s+/g, ' ');
     desc = desc.split(/\s+(?:total|importe|base|iva|subtotal|precio|qty|cantidad|unidades)/i)[0];
@@ -183,20 +183,20 @@ function extractDescription(text: string): string | null {
   return null;
 }
 
-// Detección de moneda y tasa de cambio a EUR
+// Detecci√≥n de moneda y tasa de cambio a EUR
 function detectCurrency(text: string): { currency: 'EUR' | 'USD' | 'GBP' | 'AED'; rateToEUR: number } {
   const upperText = text.toUpperCase();
 
-  // Indicadores claros de moneda (palabras explícitas tienen prioridad)
+  // Indicadores claros de moneda (palabras expl√≠citas tienen prioridad)
   const usdHints = /\bUSD\b|\$\s*\d|US\s*\$|U\.S\.\s*Dollar|Dollar/i.test(text);
-  const eurHints = /\bEUR\b|€\s*\d|\d\s*€|Euro/i.test(text);
-  const gbpHints = /\bGBP\b|£\s*\d|Pound/i.test(text);
+  const eurHints = /\bEUR\b|‚Ç¨\s*\d|\d\s*‚Ç¨|Euro/i.test(text);
+  const gbpHints = /\bGBP\b|¬£\s*\d|Pound/i.test(text);
   const aedHints = /\bAED\b|Dirham|UAE/i.test(text);
 
   // Prioridad: AED > GBP > USD > EUR (orden de menor a mayor probabilidad)
-  if (aedHints) return { currency: 'AED', rateToEUR: 0.25 };  // 1 AED ≈ 0.25 EUR
-  if (gbpHints && !eurHints) return { currency: 'GBP', rateToEUR: 1.17 }; // 1 GBP ≈ 1.17 EUR
-  if (usdHints && !eurHints) return { currency: 'USD', rateToEUR: 1 / 1.15 }; // 1 USD ≈ 0.87 EUR
+  if (aedHints) return { currency: 'AED', rateToEUR: 0.25 };  // 1 AED ‚âà 0.25 EUR
+  if (gbpHints && !eurHints) return { currency: 'GBP', rateToEUR: 1.17 }; // 1 GBP ‚âà 1.17 EUR
+  if (usdHints && !eurHints) return { currency: 'USD', rateToEUR: 1 / 1.15 }; // 1 USD ‚âà 0.87 EUR
   return { currency: 'EUR', rateToEUR: 1 }; // Default
 }
 
@@ -216,10 +216,10 @@ function extractAmount(text: string): {
   const { currency, rateToEUR } = detectCurrency(text);
 
   const totalPatterns = [
-    /total\s*(?:factura|a\s*pagar|importe|due|charged|paid)?\s*[:\s]*[€$£]?\s*([\d.,]+)\s*[€$£]?/gi,
-    /TOTAL[:\s]+[€$£]?\s*([\d.,]+)\s*[€$£]?/gi,
+    /total\s*(?:factura|a\s*pagar|importe|due|charged|paid)?\s*[:\s]*[‚Ç¨$¬£]?\s*([\d.,]+)\s*[‚Ç¨$¬£]?/gi,
+    /TOTAL[:\s]+[‚Ç¨$¬£]?\s*([\d.,]+)\s*[‚Ç¨$¬£]?/gi,
     /AED\s*([\d.,]+)/gi,
-    /grand\s*total[:\s]+[€$£]?\s*([\d.,]+)/gi,
+    /grand\s*total[:\s]+[‚Ç¨$¬£]?\s*([\d.,]+)/gi,
   ];
 
   let maxFound = 0;
@@ -243,7 +243,7 @@ function extractAmount(text: string): {
     total = total * rateToEUR;
   }
 
-  const basePatterns = [/base\s*imponible[:\s]*€?\s*([\d.,]+)/gi, /subtotal[:\s]*€?\s*([\d.,]+)/gi];
+  const basePatterns = [/base\s*imponible[:\s]*‚Ç¨?\s*([\d.,]+)/gi, /subtotal[:\s]*‚Ç¨?\s*([\d.,]+)/gi];
   for (const p of basePatterns) {
     const m = text.match(p);
     if (m && m[1]) {
@@ -288,8 +288,8 @@ function extractDate(text: string): string {
   return new Date().toISOString().split('T')[0];
 }
 
-// Auto-genera número para facturas de GASTO con formato "N-Mes"
-// Consulta Supabase para encontrar el siguiente número correlativo del mes
+// Auto-genera n√∫mero para facturas de GASTO con formato "N-Mes"
+// Consulta Supabase para encontrar el siguiente n√∫mero correlativo del mes
 async function getNextExpenseNumber(dateString: string): Promise<string> {
   const dateObj = new Date(dateString);
   const year = dateObj.getFullYear();
@@ -329,7 +329,7 @@ async function getNextExpenseNumber(dateString: string): Promise<string> {
 }
 
 // Mapear de frontend a DB
-// Solo incluimos pdf_url si tiene valor (para tolerar BBDDs sin esta columna aún)
+// Solo incluimos pdf_url si tiene valor (para tolerar BBDDs sin esta columna a√∫n)
 function mapToDB(invoice: any) {
   const base: any = {
     id: invoice.id,
@@ -357,12 +357,12 @@ function mapToDB(invoice: any) {
  * Endpoint TODO-EN-UNO para n8n:
  * 1. Recibe un PDF (multipart/form-data field: 'file')
  * 2. Analiza el PDF para extraer datos
- * 3. Crea automáticamente la factura en Supabase
+ * 3. Crea autom√°ticamente la factura en Supabase
  *
  * Body (multipart/form-data):
  * - file: el PDF de la factura
  * - type: 'income' | 'expense' (opcional, default: 'expense')
- * - subject: asunto del email (opcional, para descripción)
+ * - subject: asunto del email (opcional, para descripci√≥n)
  * - sender: remitente del email (opcional, para empresa)
  *
  * Respuesta: { success: true, invoice: {...}, analyzed: {...} }
@@ -376,7 +376,7 @@ export async function POST(req: NextRequest) {
     const sender = formData.get('sender') as string || '';
 
     if (!file) {
-      return NextResponse.json({ error: 'No se subió ningún archivo PDF' }, { status: 400 });
+      return NextResponse.json({ error: 'No se subi√≥ ning√∫n archivo PDF' }, { status: 400 });
     }
 
     // Extraer texto del PDF
@@ -387,7 +387,7 @@ export async function POST(req: NextRequest) {
 
     if (!text || text.length < 10) {
       return NextResponse.json({
-        error: 'PDF sin texto extraíble (puede ser escaneado)',
+        error: 'PDF sin texto extra√≠ble (puede ser escaneado)',
         success: false
       }, { status: 400 });
     }
@@ -396,10 +396,10 @@ export async function POST(req: NextRequest) {
     const invoiceNumber = extractInvoiceNumber(text);
     const filename = file.name || 'email.pdf';
 
-    // 🎯 DETECCIÓN INTELIGENTE DE EMPRESA - 4 estrategias por orden de prioridad:
-    // 1) Empresas conocidas (Anthropic → Claude, OpenAI → ChatGPT, etc.)
-    // 2) Nombre del remitente del email ("Anthropic <billing@...>" → "Anthropic")
-    // 3) Extracción del texto del PDF (patrones S.L., S.A., etc.)
+    // üéØ DETECCI√ìN INTELIGENTE DE EMPRESA - 4 estrategias por orden de prioridad:
+    // 1) Empresas conocidas (Anthropic ‚Üí Claude, OpenAI ‚Üí ChatGPT, etc.)
+    // 2) Nombre del remitente del email ("Anthropic <billing@...>" ‚Üí "Anthropic")
+    // 3) Extracci√≥n del texto del PDF (patrones S.L., S.A., etc.)
     // 4) Fallback al nombre del archivo
     let company: string =
       detectKnownCompany(text, sender, filename) ||
@@ -407,7 +407,7 @@ export async function POST(req: NextRequest) {
       extractCompany(text, filename) ||
       'Empresa desconocida';
 
-    // GUARANTÍA FINAL: company SIEMPRE debe ser un string válido
+    // GUARANT√çA FINAL: company SIEMPRE debe ser un string v√°lido
     if (!company || typeof company !== 'string') company = 'Empresa desconocida';
 
     let description = extractDescription(text) || subject || null;
@@ -422,14 +422,42 @@ export async function POST(req: NextRequest) {
       }, { status: 400 });
     }
 
-    // Si hubo conversión de moneda, añadir nota a la descripción
+    // Si hubo conversi√≥n de moneda, a√±adir nota a la descripci√≥n
     if (originalCurrency !== 'EUR' && originalAmount !== null) {
-      const conversionNote = `[Original: ${originalAmount.toFixed(2)} ${originalCurrency} → ${total.toFixed(2)} EUR]`;
+      const conversionNote = `[Original: ${originalAmount.toFixed(2)} ${originalCurrency} ‚Üí ${total.toFixed(2)} EUR]`;
       description = description ? `${description} ${conversionNote}` : conversionNote;
     }
 
-    // 🤖 AUTO-NUMERACIÓN: para gastos generamos número correlativo del mes (ej: "1-Jun")
-    // Para ingresos mantenemos el número extraído del PDF (es el nº de factura emitida)
+    // üõ°Ô∏è DEDUPLICACI√ìN: evita crear la misma factura varias veces cuando n8n
+    // reintenta el webhook o el email llega repetido. Buscamos una factura
+    // creada en las √∫ltimas 24h con misma empresa + fecha + importe (¬±1 c√©ntimo).
+    const dedupeSince = new Date();
+    dedupeSince.setHours(dedupeSince.getHours() - 24);
+    const { data: existingDup } = await supabase
+      .from('invoices')
+      .select('id, number, company, amount, date, created_at')
+      .eq('type', type)
+      .eq('company', company)
+      .eq('date', date)
+      .gte('amount', total - 0.02)
+      .lte('amount', total + 0.02)
+      .gte('created_at', dedupeSince.toISOString())
+      .limit(1);
+
+    if (existingDup && existingDup.length > 0) {
+      const dup = existingDup[0];
+      console.log(`[from-email] Duplicate detected: ${company} ${total}‚Ç¨ ${date} -> skipping (existing id=${dup.id})`);
+      return NextResponse.json({
+        success: true,
+        duplicate: true,
+        invoice: dup,
+        message: `‚ö†Ô∏è Duplicado detectado: ${company} ${total.toFixed(2)}‚Ç¨ del ${date} ya existe (id: ${dup.id}). No se cre√≥ nada nuevo ni se subi√≥ a Drive.`,
+        driveUpload: 'skipped-duplicate'
+      });
+    }
+
+    // ü§ñ AUTO-NUMERACI√ìN: para gastos generamos n√∫mero correlativo del mes (ej: "1-Jun")
+    // Para ingresos mantenemos el n√∫mero extra√≠do del PDF (es el n¬∫ de factura emitida)
     let finalNumber: string;
     if (type === 'expense') {
       finalNumber = await getNextExpenseNumber(date);
@@ -455,7 +483,7 @@ export async function POST(req: NextRequest) {
       paid: type === 'expense', // Gastos vienen ya pagados, ingresos vienen pendientes
     };
 
-    // 📤 SIEMPRE: Subir PDF a Supabase Storage
+    // üì§ SIEMPRE: Subir PDF a Supabase Storage
     let pdfUrl: string | null = null;
     try {
       const monthMap: Record<string, string> = {
@@ -466,7 +494,7 @@ export async function POST(req: NextRequest) {
       const dateStr = date || new Date().toISOString().split('T')[0];
       const monthShort = monthMap[dateStr.slice(5, 7)] || 'Sin';
       const cleanCompany = safeCleanCompany(company);
-      // Formato: "Mes-Número-Empresa-timestamp.pdf"
+      // Formato: "Mes-N√∫mero-Empresa-timestamp.pdf"
       const storageFileName = `${monthShort}-${invoiceNumber || 'X'}-${cleanCompany}-${Date.now()}.pdf`;
       const storagePath = `invoices/${storageFileName}`;
 
@@ -487,7 +515,7 @@ export async function POST(req: NextRequest) {
       console.error('Error uploading to storage:', storageErr);
     }
 
-    // Añadir pdfUrl al invoice antes de guardar en DB
+    // A√±adir pdfUrl al invoice antes de guardar en DB
     (newInvoice as any).pdfUrl = pdfUrl;
 
     // Guardar en Supabase
@@ -509,13 +537,13 @@ export async function POST(req: NextRequest) {
       ? ` (convertido de ${originalAmount?.toFixed(2)} ${originalCurrency})`
       : '';
 
-    // 🚀 Subir PDF a Google Drive vía webhook de n8n (fire-and-forget)
+    // üöÄ Subir PDF a Google Drive v√≠a webhook de n8n (fire-and-forget)
     const driveWebhook = process.env.DRIVE_WEBHOOK_EXPENSES;
     if (driveWebhook) {
       try {
         const cleanCompany = safeCleanCompany(company);
         // finalNumber viene en formato "N-Mes" (ej: "1-Jun")
-        // Invertimos a "Mes-N-Empresa.pdf" → "Jun-1-Stripe.pdf"
+        // Invertimos a "Mes-N-Empresa.pdf" ‚Üí "Jun-1-Stripe.pdf"
         const numMatch = finalNumber?.match(/^(\d+)-(\w+)$/);
         const flippedNumber = numMatch ? `${numMatch[2]}-${numMatch[1]}` : finalNumber;
         const driveFileName = `${flippedNumber}-${cleanCompany}.pdf`;
@@ -547,9 +575,9 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       success: true,
       invoice: newInvoice,
-      driveFileName: driveDisplayFileName, // 👈 Para usar en n8n: {{ $json.driveFileName }}
+      driveFileName: driveDisplayFileName, // üëà Para usar en n8n: {{ $json.driveFileName }}
       currency: { original: originalCurrency, converted: 'EUR', originalAmount, finalAmount: total },
-      message: `✅ Factura "${company}" añadida: ${total.toFixed(2)}€${conversionMsg}`,
+      message: `‚úÖ Factura "${company}" a√±adida: ${total.toFixed(2)}‚Ç¨${conversionMsg}`,
       driveUpload: driveWebhook ? 'queued' : 'disabled'
     });
   } catch (error: any) {
