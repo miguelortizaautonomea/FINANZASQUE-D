@@ -67,7 +67,7 @@ interface Invoice {
   pdfUrl?: string | null; // URL pública del PDF en Supabase Storage
 }
 
-const CATEGORIES = ['comidas', 'caballo', 'deporte', 'work', 'ocio', 'caprichos', 'viajes', 'campo', 'regalos', 'coche', 'desayuno'];
+const CATEGORIES = ['comidas', 'caballo', 'deporte', 'work', 'ocio', 'caprichos', 'viajes', 'campo', 'regalos', 'coche', 'desayuno', 'limpieza', 'alquiler', 'supermercado', 'restaurantes'];
 const METHODS = ['Tarjeta', 'Efectivo', 'Transferencia', 'Bizum', 'PayPal', 'Otro'];
 
 type ViewType = 'dashboard' | 'transactions' | 'accounting' | 'invoices-income' | 'invoices-expense' | 'subscriptions' | 'categories' | 'settings';
