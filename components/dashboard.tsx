@@ -222,6 +222,34 @@ export default function Dashboard() {
     pricePerUnit: '',
     hasIVA: false,
   });
+  const [savedClients, setSavedClients] = useState<{ name: string; block: string }[]>([]);
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem('savedClients');
+      if (raw) setSavedClients(JSON.parse(raw));
+    } catch {}
+  }, []);
+
+  const saveClient = (block: string) => {
+    const name = block.split('\n')[0].trim();
+    if (!name) return;
+    setSavedClients(prev => {
+      const idx = prev.findIndex(c => c.name.toLowerCase() === name.toLowerCase());
+      const next = idx >= 0 ? prev.map((c, i) => i === idx ? { name, block } : c) : [...prev, { name, block }];
+      next.sort((a, b) => a.name.localeCompare(b.name));
+      try { localStorage.setItem('savedClients', JSON.stringify(next)); } catch {}
+      return next;
+    });
+  };
+
+  const deleteClient = (name: string) => {
+    setSavedClients(prev => {
+      const next = prev.filter(c => c.name !== name);
+      try { localStorage.setItem('savedClients', JSON.stringify(next)); } catch {}
+      return next;
+    });
+  };
   const fileInputRef = useRef<HTMLInputElement>(null);
   const csvInputRef = useRef<HTMLInputElement>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -1465,6 +1493,7 @@ export default function Dashboard() {
     }
 
     const clientInfo = parseClientBlock(issueData.clientBlock);
+    saveClient(issueData.clientBlock);
 
     const units = parseFloat(issueData.units) || 1;
     const pricePerUnit = parseFloat(issueData.pricePerUnit);
@@ -4644,6 +4673,39 @@ export default function Dashboard() {
                 <p className="text-[10px] text-zinc-500">Pega o escribe todo el bloque, líneas separadas</p>
               </div>
 
+              {savedClients.length > 0 && (
+                <div className="flex items-center gap-2">
+                  <select
+                    value=""
+                    onChange={(e) => {
+                      const name = e.target.value;
+                      if (!name) return;
+                      const c = savedClients.find(c => c.name === name);
+                      if (c) setIssueData({ ...issueData, clientBlock: c.block });
+                    }}
+                    className="flex-1 px-3 py-2 border border-blue-500/40 rounded-lg bg-blue-500/5 text-white text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="">👥 Seleccionar cliente guardado ({savedClients.length})...</option>
+                    {savedClients.map(c => (
+                      <option key={c.name} value={c.name}>{c.name}</option>
+                    ))}
+                  </select>
+                  {issueData.clientBlock && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const name = issueData.clientBlock.split('\n')[0].trim();
+                        if (name && confirm(`¿Eliminar cliente guardado "${name}"?`)) deleteClient(name);
+                      }}
+                      className="px-2 py-2 text-xs text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded-lg transition"
+                      title="Eliminar cliente guardado del dropdown"
+                    >
+                      🗑️
+                    </button>
+                  )}
+                </div>
+              )}
+
               <textarea
                 value={issueData.clientBlock}
                 onChange={(e) => setIssueData({ ...issueData, clientBlock: e.target.value })}
@@ -4651,7 +4713,7 @@ export default function Dashboard() {
                 rows={6}
                 className="w-full px-4 py-3 border border-zinc-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-white bg-zinc-950 placeholder:text-zinc-600 text-sm font-mono resize-none"
               />
-              <p className="text-[10px] text-zinc-500 italic">💡 La primera línea será el nombre principal del cliente. El resto se mostrará tal cual en la factura.</p>
+              <p className="text-[10px] text-zinc-500 italic">💡 La primera línea será el nombre principal del cliente. El resto se mostrará tal cual en la factura. Los clientes se guardan automáticamente al emitir.</p>
             </div>
 
             {/* Servicio / Concepto */}
