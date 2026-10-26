@@ -537,32 +537,33 @@ export async function POST(req: NextRequest) {
       ? ` (convertido de ${originalAmount?.toFixed(2)} ${originalCurrency})`
       : '';
 
-    // 🚀 Subir PDF a Google Drive vía webhook de n8n (fire-and-forget)
-    const driveWebhook = process.env.DRIVE_WEBHOOK_EXPENSES;
-    if (driveWebhook) {
-      try {
-        const cleanCompany = safeCleanCompany(company);
-        // finalNumber viene en formato "N-Mes" (ej: "1-Jun")
-        // Invertimos a "Mes-N-Empresa.pdf" → "Jun-1-Stripe.pdf"
-        const numMatch = finalNumber?.match(/^(\d+)-(\w+)$/);
-        const flippedNumber = numMatch ? `${numMatch[2]}-${numMatch[1]}` : finalNumber;
-        const driveFileName = `${flippedNumber}-${cleanCompany}.pdf`;
+    // 🚀 Encolar en drive_queue para que drive-sync.mjs del VPS lo suba a Drive.
+    //    El PDF ya está en Supabase Storage (pdfUrl) justo arriba, así que
+    //    solo insertamos la fila; el worker del VPS lo descarga de ahí.
+    try {
+      const cleanCompany = safeCleanCompany(company);
+      // finalNumber viene en formato "N-Mes" (ej: "1-Jun")
+      // Invertimos a "Mes-N-Empresa.pdf" → "Jun-1-Stripe.pdf"
+      const numMatch = finalNumber?.match(/^(\d+)-(\w+)$/);
+      const flippedNumber = numMatch ? `${numMatch[2]}-${numMatch[1]}` : finalNumber;
+      const driveFileName = `${flippedNumber}-${cleanCompany}.pdf`;
 
-        const driveFormData = new FormData();
-        const pdfBlob = new Blob([buffer], { type: 'application/pdf' });
-        driveFormData.append('file', pdfBlob, driveFileName);
-        driveFormData.append('fileName', driveFileName);
-        driveFormData.append('company', company);
-        driveFormData.append('amount', total.toFixed(2));
-
-        // Fire-and-forget (no esperamos respuesta)
-        fetch(driveWebhook, {
-          method: 'POST',
-          body: driveFormData,
-        }).catch(err => console.error('Drive upload error:', err));
-      } catch (driveErr) {
-        console.error('Error preparing Drive upload:', driveErr);
+      if (pdfUrl) {
+        await supabase.from('drive_queue').insert([{
+          invoice_id: newInvoice.id,
+          type,
+          pdf_url: pdfUrl,
+          file_name: driveFileName,
+          invoice_number: finalNumber,
+          company,
+          amount: total,
+          invoice_date: date,
+        }]);
+      } else {
+        console.warn('[from-email] sin pdfUrl, no se encola a drive_queue');
       }
+    } catch (driveErr) {
+      console.error('Error encolando drive_queue:', driveErr);
     }
 
     // Nombre del archivo listo para usar en n8n al subir a Drive
@@ -578,7 +579,7 @@ export async function POST(req: NextRequest) {
       driveFileName: driveDisplayFileName, // 👈 Para usar en n8n: {{ $json.driveFileName }}
       currency: { original: originalCurrency, converted: 'EUR', originalAmount, finalAmount: total },
       message: `✅ Factura "${company}" añadida: ${total.toFixed(2)}€${conversionMsg}`,
-      driveUpload: driveWebhook ? 'queued' : 'disabled'
+      driveUpload: pdfUrl ? 'queued' : 'skipped-no-pdf-url'
     });
   } catch (error: any) {
     console.error('Error procesando email PDF:', error);

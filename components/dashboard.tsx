@@ -1791,28 +1791,29 @@ export default function Dashboard() {
       return;
     }
 
-    // 📤 Subir el PDF a Google Drive vía webhook de n8n
-    const webhookUrl = process.env.NEXT_PUBLIC_DRIVE_WEBHOOK;
-    if (webhookUrl && pdfBlob) {
+    // 📤 Encolar el PDF para que drive-sync.mjs del VPS lo suba a Drive
+    //    (sustituye el fire-and-forget al webhook de n8n). El PDF se sube
+    //    a Supabase Storage y el worker del VPS lo coge de ahí.
+    if (pdfBlob) {
       try {
         const driveFormData = new FormData();
         driveFormData.append('file', pdfBlob, pdfFileName);
         driveFormData.append('fileName', pdfFileName);
+        driveFormData.append('type', 'income');
         driveFormData.append('invoiceNumber', invoiceFullNumber);
+        driveFormData.append('invoiceId', newInvoice.id);
         driveFormData.append('clientName', clientInfo.name);
         driveFormData.append('total', total.toFixed(2));
+        driveFormData.append('invoiceDate', today);
 
-        fetch(webhookUrl, {
-          method: 'POST',
-          body: driveFormData,
-        }).then(res => {
-          if (res.ok) console.log('✅ Factura PDF subida a Drive');
-          else console.error('Drive upload status:', res.status);
-        }).catch(err => {
-          console.error('Drive upload error:', err);
-        });
+        fetch('/api/drive-queue', { method: 'POST', body: driveFormData })
+          .then(res => {
+            if (res.ok) console.log('✅ Factura encolada para subir a Drive');
+            else console.error('drive-queue status:', res.status);
+          })
+          .catch(err => console.error('drive-queue error:', err));
       } catch (driveErr) {
-        console.error('Error preparing Drive upload:', driveErr);
+        console.error('Error encolando para Drive:', driveErr);
       }
     }
 
