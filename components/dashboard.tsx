@@ -224,37 +224,26 @@ export default function Dashboard() {
   });
   const [savedClients, setSavedClients] = useState<{ name: string; block: string }[]>([]);
 
+  // Cargar clientes guardados: primero localStorage (rápido), después BBDD (ganador)
   useEffect(() => {
     try {
       const raw = localStorage.getItem('savedClients');
       if (raw) setSavedClients(JSON.parse(raw));
     } catch {}
+    fetch('/api/clients')
+      .then(r => r.json())
+      .then(data => {
+        const list = Array.isArray(data?.clients) ? data.clients : [];
+        if (!list.length) return;
+        const normalized = list
+          .filter((c: any) => c?.name && c?.block)
+          .map((c: any) => ({ name: String(c.name).trim(), block: String(c.block) }))
+          .sort((a: any, b: any) => a.name.localeCompare(b.name));
+        setSavedClients(normalized);
+        try { localStorage.setItem('savedClients', JSON.stringify(normalized)); } catch {}
+      })
+      .catch(() => {});
   }, []);
-
-  // Mergear clientes del histórico de BBDD (ingresos ya emitidos) en el dropdown
-  useEffect(() => {
-    if (!invoices || invoices.length === 0) return;
-    const companies = Array.from(new Set(
-      invoices
-        .filter((i: any) => i?.type === 'income' && typeof i?.company === 'string' && i.company.trim())
-        .map((i: any) => i.company.trim())
-    )) as string[];
-    if (!companies.length) return;
-    setSavedClients(prev => {
-      const byName = new Map(prev.map(c => [c.name.toLowerCase(), c]));
-      let changed = false;
-      companies.forEach(c => {
-        if (!byName.has(c.toLowerCase())) {
-          byName.set(c.toLowerCase(), { name: c, block: c });
-          changed = true;
-        }
-      });
-      if (!changed) return prev;
-      const merged = Array.from(byName.values()).sort((a, b) => a.name.localeCompare(b.name));
-      try { localStorage.setItem('savedClients', JSON.stringify(merged)); } catch {}
-      return merged;
-    });
-  }, [invoices]);
 
   const saveClient = (block: string) => {
     const name = block.split('\n')[0].trim();
@@ -266,6 +255,12 @@ export default function Dashboard() {
       try { localStorage.setItem('savedClients', JSON.stringify(next)); } catch {}
       return next;
     });
+    // Persistir en BBDD (fire-and-forget)
+    fetch('/api/clients', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, block }),
+    }).catch(() => {});
   };
 
   const deleteClient = (name: string) => {
@@ -274,6 +269,7 @@ export default function Dashboard() {
       try { localStorage.setItem('savedClients', JSON.stringify(next)); } catch {}
       return next;
     });
+    fetch(`/api/clients?name=${encodeURIComponent(name)}`, { method: 'DELETE' }).catch(() => {});
   };
   const fileInputRef = useRef<HTMLInputElement>(null);
   const csvInputRef = useRef<HTMLInputElement>(null);
