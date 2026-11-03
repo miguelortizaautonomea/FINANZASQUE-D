@@ -231,6 +231,31 @@ export default function Dashboard() {
     } catch {}
   }, []);
 
+  // Mergear clientes del histórico de BBDD (ingresos ya emitidos) en el dropdown
+  useEffect(() => {
+    if (!invoices || invoices.length === 0) return;
+    const companies = Array.from(new Set(
+      invoices
+        .filter((i: any) => i?.type === 'income' && typeof i?.company === 'string' && i.company.trim())
+        .map((i: any) => i.company.trim())
+    )) as string[];
+    if (!companies.length) return;
+    setSavedClients(prev => {
+      const byName = new Map(prev.map(c => [c.name.toLowerCase(), c]));
+      let changed = false;
+      companies.forEach(c => {
+        if (!byName.has(c.toLowerCase())) {
+          byName.set(c.toLowerCase(), { name: c, block: c });
+          changed = true;
+        }
+      });
+      if (!changed) return prev;
+      const merged = Array.from(byName.values()).sort((a, b) => a.name.localeCompare(b.name));
+      try { localStorage.setItem('savedClients', JSON.stringify(merged)); } catch {}
+      return merged;
+    });
+  }, [invoices]);
+
   const saveClient = (block: string) => {
     const name = block.split('\n')[0].trim();
     if (!name) return;
