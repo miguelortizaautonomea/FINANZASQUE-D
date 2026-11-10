@@ -1,7 +1,7 @@
 import { NextResponse, NextRequest } from 'next/server';
 
-// Endpoint para hacer OCR de una IMAGEN (foto de factura) y extraer los datos
-// Usa OCR.space API (gratis con API key "helloworld" para demo)
+export const runtime = 'nodejs';
+export const maxDuration = 30;
 
 interface AnalyzedInvoice {
   invoiceNumber: string | null;
@@ -13,296 +13,149 @@ interface AnalyzedInvoice {
   ivaPercent: number;
 }
 
-// === EXTRACTORS (mismos que analyze-pdf) ===
-function extractInvoiceNumber(text: string): string | null {
-  const safeText = text || '';
-  const patterns = [
-    /(?:factura|invoice|ticket|n[º°ºo])[\s\/]*(?:n[º°ºo]\.?|num(?:ero)?|nr\.?|#)\s*:?\s*([A-Z]*-?)?(\d+)/i,
-    /(?:n[º°ºo]\.?|num(?:ero)?|nr\.?)\s*(?:factura|invoice)?\s*:?\s*([A-Z]*-?)?(\d+)/i,
-    /n[º°ºo]\s*:?\s*([A-Z]*-?)?(\d+)/i,
-  ];
-  for (const pattern of patterns) {
-    const m = safeText.match(pattern);
-    if (m && m[2] && typeof m[2] === 'string') {
-      const num = m[2].replace(/^0+/, '');
-      return num || '0';
-    }
-  }
-  return null;
+function humanError(message: string, detail?: string, status = 400) {
+  return NextResponse.json(
+    { success: false, error: message, ...(detail ? { detail } : {}) },
+    { status }
+  );
 }
 
-// Mi nombre y datos personales (para filtrar y NO confundirlo con el vendedor)
-const MY_NAME_REGEX = /miguel\s*[áa]ngel?\s*ortiz|miguel\.?ortiz|49549728T/i;
-
-function extractCompany(text: string): string | null {
-  const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
-
-  // 1) Empresas conocidas (incluido "amazon" via dominio amzn)
-  const KNOWN: [string, string][] = [
-    ['mercadona', 'Mercadona'], ['carrefour', 'Carrefour'], ['lidl', 'Lidl'],
-    ['aldi', 'Aldi'], ['eroski', 'Eroski'], ['consum', 'Consum'],
-    ['amazon', 'Amazon'], ['amzn', 'Amazon'], ['el corte ingles', 'El Corte Inglés'],
-    ['media markt', 'Media Markt'], ['decathlon', 'Decathlon'],
-    ['leroy merlin', 'Leroy Merlin'], ['ikea', 'IKEA'],
-    ['apple.com', 'Apple'], ['itunes', 'Apple'], ['app store', 'Apple'],
-    ['google workspace', 'Google Workspace'], ['workspace', 'Google Workspace'],
-    ['meta platforms', 'Verificado Meta'], ['verificado meta', 'Verificado Meta'],
-    ['netflix', 'Netflix'], ['spotify', 'Spotify'],
-    ['gohighlevel', 'GoHighLevel'], ['highlevel', 'GoHighLevel'], ['msgsndr', 'GoHighLevel'],
-    ['stripe.com', 'Stripe'], ['stripe', 'Stripe'],
-    ['openai', 'ChatGPT'], ['chatgpt', 'ChatGPT'],
-    ['claude.ai', 'Claude'], ['anthropic', 'Claude'],
-    ['railway.com', 'Railway'], ['railway corp', 'Railway'],
-    ['smartlead', 'Smartlead'], ['slack', 'Slack'],
-    ['zapmail', 'Zapmail'], ['twilio', 'Twilio'],
-    ['mailerlite', 'MailerLite'], ['retell', 'Retell AI'],
-    ['circle.so', 'Circle Club'], ['circle club', 'Circle Club'],
-    ['wernells', 'Wernells Center'],
-    ['serendipia', 'Serendipia LLC'], ['theplaze', 'The Plaze'],
-    ['repsol', 'Repsol'], ['cepsa', 'Cepsa'], ['shell', 'Shell'],
-    ['mcdonald', 'McDonalds'], ['burger king', 'Burger King'],
-    ['starbucks', 'Starbucks'], ['telepizza', 'Telepizza'],
-    ['n8n', 'N8N'],
-  ];
-
-  const lowerText = text.toLowerCase();
-  for (const [k, display] of KNOWN) {
-    if (lowerText.includes(k)) return display;
+async function analyzeWithClaude(file: File): Promise<AnalyzedInvoice> {
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (!apiKey) {
+    throw new Error(
+      'Falta la variable ANTHROPIC_API_KEY en Vercel. Añádela en Project Settings → Environment Variables y vuelve a desplegar.'
+    );
   }
 
-  // 2) Buscar "Sold by", "Vendido por", "From:", "De:"
-  const vendorPatterns = [
-    /(?:sold\s*by|vendido\s*por|vendor|vendedor)[:\s]+([A-Z][A-Za-z0-9&\s\.\-]{3,80})/i,
-    /(?:from|de|emitida\s*por)[:\s]+([A-Z][A-Za-z0-9&\s\.\-]{3,80}\s+(?:S\.?L\.?|S\.?A\.?|SL|SA|SLU|INC\.?|LLC\.?|LTD\.?|GmbH|B\.?V\.?|S\.?R\.?L\.?))/i,
-  ];
-  for (const p of vendorPatterns) {
-    const m = text.match(p);
-    if (m && m[1] && !MY_NAME_REGEX.test(m[1])) {
-      let c = m[1].trim().replace(/[\n\r].*$/, '').trim();
-      if (c.length >= 3 && c.length <= 80) return c.substring(0, 60);
-    }
-  }
+  const buf = Buffer.from(await file.arrayBuffer());
+  const mediaType = file.type && file.type.startsWith('image/') ? file.type : 'image/jpeg';
+  const b64 = buf.toString('base64');
 
-  // 3) Patrón de razón social (S.L., S.A., LLC...)
-  const companyPatterns = [
-    /([A-Z][A-Za-z0-9&\s,\.\-]{2,80}(?:\s+S\.?L\.?(?:U\.?)?|\s+S\.?A\.?|\s+SL|\s+SA|\s+SLU|\s+INC\.?|\s+LLC\.?|\s+LTD\.?|\s+GmbH|\s+B\.?V\.?|\s+S\.?R\.?L\.?))/,
-  ];
-  for (let i = 0; i < Math.min(lines.length, 25); i++) {
-    const line = lines[i];
-    if (/^[\d\s.,€%/\-+]+$/.test(line)) continue;
-    if (line.length < 3 || line.length > 100) continue;
-    if (MY_NAME_REGEX.test(line)) continue; // saltar mi nombre
-    for (const p of companyPatterns) {
-      const m = line.match(p);
-      if (m && m[1]) return m[1].trim();
-    }
-  }
+  const prompt = `Eres un extractor de datos de FACTURAS/TICKETS en español. Mira la imagen y devuelve SOLO un JSON válido con estas claves (sin markdown, sin explicación):
 
-  // 4) Fallback: primera línea con letras que NO sea mi nombre o etiquetas
-  for (const line of lines.slice(0, 8)) {
-    if (line.length < 3 || line.length > 80) continue;
-    if (!/[A-Za-z]/.test(line)) continue;
-    if (MY_NAME_REGEX.test(line)) continue;
-    if (/^(factura|invoice|fecha|date|total|ticket|importe|customer|billing|delivery|sold|vendor|recipient|cliente|destinatario|page|paid)/i.test(line)) continue;
-    return line.substring(0, 50);
-  }
-  return null;
+{
+  "invoiceNumber": "numero de factura o ticket (solo digitos, sin ceros a la izquierda; null si no se ve)",
+  "company": "nombre de la EMPRESA que emite la factura (no el cliente, nunca 'Miguel Angel Ortiz'); si es cadena conocida usa el nombre comun: Mercadona, Amazon, Apple, Google Workspace, Verificado Meta, GoHighLevel, Stripe, ChatGPT, Claude, Railway, Smartlead, MailerLite, Telepizza, Repsol, etc.",
+  "description": "concepto o descripcion corta de lo comprado; null si no se ve",
+  "amount": "IMPORTE TOTAL pagado en EUR como numero (ej: 15.99); null si no se ve",
+  "amountWithoutVAT": "base imponible antes de IVA como numero; null si no se ve",
+  "vat": "cantidad de IVA en EUR como numero; null si no se ve",
+  "ivaPercent": "porcentaje de IVA: 21, 10, 4 o 0"
 }
 
-function extractDescription(text: string): string | null {
-  const m = text.match(/(?:concepto|descripci[oó]n|detalle|description)[:\s]+([^\n\r]{5,200})/i);
-  if (m && m[1]) {
-    let desc = m[1].trim().replace(/\s+/g, ' ');
-    desc = desc.split(/\s+(?:total|importe|base|iva|subtotal|precio)/i)[0];
-    if (desc.length > 100) desc = desc.substring(0, 97) + '...';
-    if (desc.length >= 5) return desc.trim();
+Reglas:
+- Devuelve SOLO el JSON, nada mas.
+- Numeros como numeros, no strings.
+- Si falta un dato, usa null (no inventes).
+- El IVA puede estar implicito; si solo se ve el total, pon ivaPercent=21 y calcula base/vat.
+- El importe siempre en EUR; si la factura esta en USD convierte dividiendo por 1.15.`;
+
+  const res = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      'x-api-key': apiKey,
+      'anthropic-version': '2023-06-01',
+    },
+    body: JSON.stringify({
+      model: 'claude-haiku-5-5',
+      max_tokens: 1024,
+      messages: [
+        {
+          role: 'user',
+          content: [
+            { type: 'image', source: { type: 'base64', media_type: mediaType, data: b64 } },
+            { type: 'text', text: prompt },
+          ],
+        },
+      ],
+    }),
+  });
+
+  if (!res.ok) {
+    const txt = await res.text();
+    throw new Error(`Claude API ${res.status}: ${txt.substring(0, 200)}`);
   }
-  return null;
+
+  const data = await res.json();
+  const content = data?.content?.[0]?.text || '';
+  let jsonStr = content.trim();
+  const fence = jsonStr.match(/```(?:json)?\s*([\s\S]*?)```/);
+  if (fence) jsonStr = fence[1].trim();
+  const braceStart = jsonStr.indexOf('{');
+  const braceEnd = jsonStr.lastIndexOf('}');
+  if (braceStart >= 0 && braceEnd > braceStart) jsonStr = jsonStr.substring(braceStart, braceEnd + 1);
+
+  let parsed: any;
+  try {
+    parsed = JSON.parse(jsonStr);
+  } catch {
+    throw new Error(`Claude devolvio una respuesta no-JSON: ${content.substring(0, 200)}`);
+  }
+
+  const toNum = (v: any): number | null => {
+    if (v === null || v === undefined || v === '') return null;
+    if (typeof v === 'number' && isFinite(v)) return v;
+    const n = parseFloat(String(v).replace(/[^\d\.,\-]/g, '').replace(',', '.'));
+    return isFinite(n) ? n : null;
+  };
+
+  const total = toNum(parsed.amount);
+  let base = toNum(parsed.amountWithoutVAT);
+  let vat = toNum(parsed.vat);
+  let ivaPercent = Number(parsed.ivaPercent);
+  if (!isFinite(ivaPercent) || ivaPercent < 0 || ivaPercent > 25) ivaPercent = 0;
+
+  if (total !== null) {
+    if (ivaPercent > 0 && base === null) base = total / (1 + ivaPercent / 100);
+    if (ivaPercent > 0 && vat === null && base !== null) vat = total - base;
+    if (ivaPercent === 0 && base === null) base = total;
+  }
+
+  const num = (v: any): string | null => {
+    if (v === null || v === undefined) return null;
+    const s = String(v).replace(/^0+/, '');
+    return s || null;
+  };
+
+  return {
+    invoiceNumber: num(parsed.invoiceNumber),
+    company: parsed.company ? String(parsed.company).substring(0, 80) : null,
+    description: parsed.description ? String(parsed.description).substring(0, 200) : null,
+    amount: total,
+    amountWithoutVAT: base,
+    vat,
+    ivaPercent,
+  };
 }
 
-// Normaliza un número que puede tener . o , como decimal
-function parseMoney(raw: string): number {
-  if (!raw) return NaN;
-  let s = raw.trim().replace(/\s/g, '');
-  const hasDot = s.includes('.');
-  const hasComma = s.includes(',');
-  if (hasDot && hasComma) {
-    // 1.500,75 (EU) o 1,500.75 (US): el último separador es decimal
-    const lastDot = s.lastIndexOf('.');
-    const lastComma = s.lastIndexOf(',');
-    if (lastDot > lastComma) return parseFloat(s.replace(/,/g, ''));
-    return parseFloat(s.replace(/\./g, '').replace(',', '.'));
-  }
-  // Solo coma o solo punto: tratar como decimal si tiene 1-2 dígitos detrás
-  if (hasComma) {
-    const parts = s.split(',');
-    if (parts.length === 2 && parts[1].length <= 2) return parseFloat(s.replace(',', '.'));
-    // Si tiene 3 dígitos detrás, es miles → eliminar
-    if (parts.length === 2 && parts[1].length === 3) return parseFloat(s.replace(',', ''));
-  }
-  return parseFloat(s);
-}
-
-// Detecta si un número con formato N.NN es realmente parte de una fecha N.NN.YYYY
-// Pasamos el texto completo y la posición del match para revisar el contexto
-function isFromDate(text: string, matchPos: number, matchStr: string): boolean {
-  // Buscar lo que viene inmediatamente después del match
-  const after = text.substring(matchPos + matchStr.length, matchPos + matchStr.length + 6);
-  // Si lo que sigue es .YYYY o /YYYY o -YYYY, es una fecha
-  return /^[\.\/-]\d{2,4}/.test(after);
-}
-
-function extractAmount(text: string): { total: number | null; base: number | null; vat: number | null; ivaPercent: number } {
-  let total: number | null = null;
-  let base: number | null = null;
-  let vat: number | null = null;
-
-  // === 1) PRIORIDAD ALTA: buscar todos los importes con € o $ explícito ===
-  // Esto es lo MÁS FIABLE: si hay un símbolo de moneda, es un monto real
-  const allAmounts: number[] = [];
-  // Detecta: "15.99€", "15.99 €", "€ 15.99", "€15.99", "$15.99", "EUR 15.99", etc.
-  const moneyRegex = /[€$£]\s*(\d+[\.,]\d{1,2})|(\d+[\.,]\d{1,2})\s*[€$£]|(?:EUR|USD|GBP)\s*(\d+[\.,]\d{1,2})/g;
-  let m;
-  while ((m = moneyRegex.exec(text)) !== null) {
-    const raw = m[1] || m[2] || m[3];
-    if (!raw) continue;
-    // Verificar que NO sea parte de una fecha (ej: 03.06.2026)
-    if (isFromDate(text, m.index, m[0])) continue;
-    const num = parseMoney(raw);
-    if (!isNaN(num) && num > 0 && num < 100000) allAmounts.push(num);
-  }
-
-  // === 2) BACKUP: si NO hay importes con símbolo, buscar contexto "Total" ===
-  const lines = text.split('\n').map(l => l.trim());
-  const totalCandidates: number[] = [];
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-    if (/total|importe.*total|importe.*pagar|grand\s*total/i.test(line)) {
-      for (let j = i; j < Math.min(i + 4, lines.length); j++) {
-        const target = lines[j];
-        const numMatches = target.matchAll(/(\d+[\.,]\d{1,2})/g);
-        for (const nm of numMatches) {
-          const raw = nm[1];
-          // Verificar que el número en el target original no sea parte de fecha
-          if (isFromDate(target, nm.index!, raw)) continue;
-          const num = parseMoney(raw);
-          if (!isNaN(num) && num > 0.5 && num < 100000) totalCandidates.push(num);
-        }
-      }
-    }
-  }
-
-  // === 3) Decidir el total ===
-  if (allAmounts.length > 0) {
-    // Si hay importes con €/$, usar el MAYOR (suele ser el total)
-    total = Math.max(...allAmounts);
-  } else if (totalCandidates.length > 0) {
-    // Sin símbolo de moneda: usar el último candidato cerca de "Total"
-    total = totalCandidates[totalCandidates.length - 1];
-  }
-
-  // === 4) IVA detection ===
-  const has21 = /21\s*%|iva.*21|vat.*21/i.test(text);
-  const has10 = /10\s*%|iva.*10|vat.*10/i.test(text);
-  const has4 = /\b4\s*%|iva.*4\b|vat.*4\b/i.test(text);
-
-  let ivaPercent = 0;
-  if (has21) ivaPercent = 21;
-  else if (has10) ivaPercent = 10;
-  else if (has4) ivaPercent = 4;
-
-  // === 5) Buscar base imponible explícita ===
-  const baseMatch = text.match(/(?:base\s*imponible|subtotal|importe\s*neto|net\s*amount)\s*[:\s]*[€$£]?\s*([\d]+[\.,]\d{1,3}|\d+)/i);
-  if (baseMatch) {
-    const b = parseMoney(baseMatch[1]);
-    if (!isNaN(b) && b > 0) base = b;
-  }
-
-  if (ivaPercent > 0 && total !== null) {
-    if (base === null) base = total / (1 + ivaPercent / 100);
-    vat = total - base;
-  } else if (total !== null) {
-    base = total;
-    vat = 0;
-  }
-
-  return { total, base, vat, ivaPercent };
-}
-
-// === ENDPOINT POST ===
 export async function POST(req: NextRequest) {
+  let file: File | null = null;
   try {
     const formData = await req.formData();
-    const file = formData.get('file') as File;
-    if (!file) return NextResponse.json({ error: 'No se subió ningún archivo' }, { status: 400 });
+    file = formData.get('file') as File | null;
+  } catch (e: any) {
+    return humanError('No se pudo leer la foto que enviaste', e?.message, 400);
+  }
 
-    // Llamar a OCR.space API
-    const OCR_API_KEY = process.env.OCR_SPACE_API_KEY || 'helloworld';
-    const ocrFormData = new FormData();
-    ocrFormData.append('apikey', OCR_API_KEY);
-    ocrFormData.append('language', 'spa');
-    ocrFormData.append('isOverlayRequired', 'false');
-    ocrFormData.append('detectOrientation', 'true');
-    ocrFormData.append('scale', 'true');
-    ocrFormData.append('OCREngine', '2'); // Engine 2: mejor calidad
-    ocrFormData.append('file', file);
+  if (!file) return humanError('No se subió ninguna foto', undefined, 400);
+  if (!file.type.startsWith('image/')) {
+    return humanError(`El archivo no parece una imagen (tipo: ${file.type || 'desconocido'})`, undefined, 400);
+  }
+  if (file.size > 10 * 1024 * 1024) {
+    return humanError('La foto pesa mas de 10 MB. Reducela y vuelve a probar.', undefined, 413);
+  }
 
-    const ocrRes = await fetch('https://api.ocr.space/parse/image', {
-      method: 'POST',
-      body: ocrFormData,
-    });
-
-    if (!ocrRes.ok) {
-      const errText = await ocrRes.text();
-      return NextResponse.json({
-        error: 'Error en OCR.space: HTTP ' + ocrRes.status,
-        detail: errText.substring(0, 200),
-        success: false,
-      }, { status: 500 });
-    }
-
-    const ocrData = await ocrRes.json();
-    if (ocrData.IsErroredOnProcessing) {
-      return NextResponse.json({
-        error: ocrData.ErrorMessage?.[0] || 'OCR processing failed',
-        success: false,
-      }, { status: 500 });
-    }
-
-    const text = ocrData.ParsedResults?.[0]?.ParsedText || '';
-    if (!text || text.length < 5) {
-      return NextResponse.json({
-        error: 'No se detectó texto en la imagen',
-        success: false,
-      }, { status: 400 });
-    }
-
-    // Extraer datos del texto
-    const invoiceNumber = extractInvoiceNumber(text);
-    const company = extractCompany(text);
-    const description = extractDescription(text);
-    const { total, base, vat, ivaPercent } = extractAmount(text);
-
-    const analyzed: AnalyzedInvoice = {
-      invoiceNumber,
-      company,
-      description,
-      amount: total,
-      amountWithoutVAT: base,
-      vat,
-      ivaPercent,
-    };
-
-    return NextResponse.json({
-      success: true,
-      data: analyzed,
-      rawText: text.substring(0, 500),
-    });
+  try {
+    const analyzed = await analyzeWithClaude(file);
+    return NextResponse.json({ success: true, data: analyzed });
   } catch (error: any) {
-    console.error('Error in /api/analyze-image:', error);
-    return NextResponse.json({
-      error: error.message || 'Error analizando la imagen',
-      success: false,
-    }, { status: 500 });
+    console.error('[analyze-image] error:', error);
+    return humanError(
+      error?.message || 'Error analizando la imagen',
+      undefined,
+      500
+    );
   }
 }
